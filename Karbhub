@@ -1,32 +1,202 @@
-local function boostFPS()
-    for _, v in pairs(game:GetDescendants()) do
-        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
-            v.Enabled = false
-        elseif v:IsA("Explosion") then
-            v.Visible = false
-        elseif v:IsA("Decal") or v:IsA("Texture") then
-            v.Transparency = 1
-        end
-    end
+--[[
+    Script tìm server ít người hoặc ping thấp với GUI
+    Có nút ẩn/hiện GUI
+--]]
 
-    game.Lighting.GlobalShadows = false
-    game.Lighting.FogEnd = 100000
-    game.Lighting.Brightness = 1
+-- Khai báo biến toàn cục
+local guiVisible = true
+local mainFrame = nil
+local serverList = {}
+local sortBy = "players" -- Mặc định sắp xếp theo số người
 
-    for _, v in pairs(game.Lighting:GetChildren()) do
-        if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("SunRaysEffect") then
-            v.Enabled = false
-        end
-    end
-
-    if workspace:FindFirstChild("Terrain") then
-        workspace.Terrain.WaterWaveSize = 0
-        workspace.Terrain.WaterSpeed = 0
-        workspace.Terrain.WaterReflectance = 0
-        workspace.Terrain.WaterTransparency = 0
-    end
-
-    print("✅ Boost FPS đã kích hoạt!")
+-- Giả lập dữ liệu server (trong thực tế bạn sẽ lấy từ API game)
+local function mockServerData()
+    return {
+        {name = "Server A", players = 12, maxPlayers = 24, ping = 56},
+        {name = "Server B", players = 4, maxPlayers = 20, ping = 112},
+        {name = "Server C", players = 18, maxPlayers = 20, ping = 34},
+        {name = "Server D", players = 2, maxPlayers = 16, ping = 78},
+        {name = "Server E", players = 9, maxPlayers = 12, ping = 45},
+    }
 end
 
-boostFPS()
+-- Hàm sắp xếp server
+local function sortServers()
+    if sortBy == "players" then
+        table.sort(serverList, function(a, b)
+            return a.players < b.players
+        end)
+    else -- ping
+        table.sort(serverList, function(a, b)
+            return a.ping < b.ping
+        end)
+    end
+end
+
+-- Hàm cập nhật danh sách server
+local function updateServerList()
+    serverList = mockServerData()
+    sortServers()
+    
+    -- Xóa danh sách cũ (nếu có)
+    if mainFrame and mainFrame.listContainer then
+        mainFrame.listContainer:Destroy()
+    end
+    
+    -- Tạo container mới
+    local listContainer = Instance.new("ScrollingFrame")
+    listContainer.Name = "listContainer"
+    listContainer.Size = UDim2.new(0.95, 0, 0.7, 0)
+    listContainer.Position = UDim2.new(0.025, 0, 0.2, 0)
+    listContainer.BackgroundTransparency = 1
+    listContainer.ScrollBarThickness = 5
+    listContainer.Parent = mainFrame
+    
+    -- Thêm các server vào danh sách
+    for i, server in ipairs(serverList) do
+        local serverFrame = Instance.new("Frame")
+        serverFrame.Name = "server_" .. i
+        serverFrame.Size = UDim2.new(1, 0, 0, 60)
+        serverFrame.Position = UDim2.new(0, 0, 0, (i-1)*65)
+        serverFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        serverFrame.BorderSizePixel = 0
+        serverFrame.Parent = listContainer
+        
+        -- Tên server
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Text = server.name
+        nameLabel.Size = UDim2.new(0.6, 0, 0.5, 0)
+        nameLabel.Position = UDim2.new(0.05, 0, 0.1, 0)
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Parent = serverFrame
+        
+        -- Thông tin người chơi
+        local playersLabel = Instance.new("TextLabel")
+        playersLabel.Text = "Players: " .. server.players .. "/" .. server.maxPlayers
+        playersLabel.Size = UDim2.new(0.4, 0, 0.3, 0)
+        playersLabel.Position = UDim2.new(0.55, 0, 0.1, 0)
+        playersLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        playersLabel.TextXAlignment = Enum.TextXAlignment.Right
+        playersLabel.BackgroundTransparency = 1
+        playersLabel.Parent = serverFrame
+        
+        -- Ping
+        local pingLabel = Instance.new("TextLabel")
+        pingLabel.Text = "Ping: " .. server.ping .. "ms"
+        pingLabel.Size = UDim2.new(0.4, 0, 0.3, 0)
+        pingLabel.Position = UDim2.new(0.55, 0, 0.5, 0)
+        pingLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        pingLabel.TextXAlignment = Enum.TextXAlignment.Right
+        pingLabel.BackgroundTransparency = 1
+        pingLabel.Parent = serverFrame
+        
+        -- Nút kết nối (giả lập)
+        local connectButton = Instance.new("TextButton")
+        connectButton.Text = "Connect"
+        connectButton.Size = UDim2.new(0.3, 0, 0.4, 0)
+        connectButton.Position = UDim2.new(0.05, 0, 0.55, 0)
+        connectButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+        connectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        connectButton.Parent = serverFrame
+        
+        connectButton.MouseButton1Click:Connect(function()
+            print("Connecting to " .. server.name)
+            -- Thêm code kết nối thực tế ở đây
+        end)
+    end
+    
+    listContainer.CanvasSize = UDim2.new(0, 0, 0, #serverList * 65)
+end
+
+-- Hàm tạo GUI
+local function createGUI()
+    -- Tạo frame chính
+    mainFrame = Instance.new("Frame")
+    mainFrame.Name = "ServerFinderGUI"
+    mainFrame.Size = UDim2.new(0.3, 0, 0.6, 0)
+    mainFrame.Position = UDim2.new(0.35, 0, 0.2, 0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = game:GetService("CoreGui") -- Hoặc parent phù hợp với game của bạn
+    
+    -- Tiêu đề
+    local title = Instance.new("TextLabel")
+    title.Text = "SERVER FINDER"
+    title.Size = UDim2.new(0.9, 0, 0.1, 0)
+    title.Position = UDim2.new(0.05, 0, 0.02, 0)
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextScaled = true
+    title.BackgroundTransparency = 1
+    title.Parent = mainFrame
+    
+    -- Nút sắp xếp theo số người
+    local sortPlayersBtn = Instance.new("TextButton")
+    sortPlayersBtn.Text = "Sort by Players"
+    sortPlayersBtn.Size = UDim2.new(0.45, 0, 0.08, 0)
+    sortPlayersBtn.Position = UDim2.new(0.025, 0, 0.12, 0)
+    sortPlayersBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    sortPlayersBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    sortPlayersBtn.Parent = mainFrame
+    
+    sortPlayersBtn.MouseButton1Click:Connect(function()
+        sortBy = "players"
+        updateServerList()
+    end)
+    
+    -- Nút sắp xếp theo ping
+    local sortPingBtn = Instance.new("TextButton")
+    sortPingBtn.Text = "Sort by Ping"
+    sortPingBtn.Size = UDim2.new(0.45, 0, 0.08, 0)
+    sortPingBtn.Position = UDim2.new(0.525, 0, 0.12, 0)
+    sortPingBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    sortPingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    sortPingBtn.Parent = mainFrame
+    
+    sortPingBtn.MouseButton1Click:Connect(function()
+        sortBy = "ping"
+        updateServerList()
+    end)
+    
+    -- Nút ẩn/hiện GUI
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Text = "Hide"
+    toggleBtn.Size = UDim2.new(0.2, 0, 0.08, 0)
+    toggleBtn.Position = UDim2.new(0.75, 0, 0.02, 0)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Parent = mainFrame
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        guiVisible = not guiVisible
+        mainFrame.Visible = guiVisible
+        toggleBtn.Text = guiVisible and "Hide" or "Show"
+    end)
+    
+    -- Cập nhật danh sách server lần đầu
+    updateServerList()
+end
+
+-- Hàm khởi tạo
+local function init()
+    createGUI()
+    
+    -- Tạo hotkey để ẩn/hiện GUI (ví dụ: F5)
+    local userInputService = game:GetService("UserInputService")
+    userInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.F5 then
+            guiVisible = not guiVisible
+            mainFrame.Visible = guiVisible
+            local toggleBtn = mainFrame:FindFirstChildOfClass("TextButton")
+            if toggleBtn then
+                toggleBtn.Text = guiVisible and "Hide" or "Show"
+            end
+        end
+    end)
+end
+
+-- Chạy script
+init()
