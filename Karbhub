@@ -4,146 +4,121 @@ local HttpService = game:GetService("HttpService")
 
 local PLACE_ID = game.PlaceId
 
--- ScreenGui
+-- GUI setup
 local gui = Instance.new("ScreenGui", Players.LocalPlayer:WaitForChild("PlayerGui"))
-gui.Name = "ServerBrowserGui"
+gui.Name = "ServerListGui"
 
--- Main Frame
 local frame = Instance.new("Frame", gui)
-frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 400, 0, 300)
-frame.Position = UDim2.new(0.5, -200, 0.5, -150)
+frame.Size = UDim2.new(0, 500, 0, 450)
+frame.Position = UDim2.new(0.5, -250, 0.5, -225)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
-frame.BackgroundTransparency = 0.05
 frame.Active = true
 frame.Draggable = true
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 16)
 
--- Title Label
 local title = Instance.new("TextLabel", frame)
-title.Text = "🖧 Trình duyệt Server"
+title.Text = "🖧 Danh sách Server ít người (sắp xếp theo ping)"
 title.Size = UDim2.new(1, 0, 0, 40)
-title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
 title.TextSize = 22
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextColor3 = Color3.new(1, 1, 1)
+title.BackgroundTransparency = 1
 
--- Info Label
-local info = Instance.new("TextLabel", frame)
-info.Position = UDim2.new(0, 10, 0, 50)
-info.Size = UDim2.new(1, -20, 1, -130)
-info.BackgroundTransparency = 1
-info.Font = Enum.Font.Gotham
-info.TextSize = 14
-info.TextColor3 = Color3.fromRGB(255, 255, 255)
-info.TextWrapped = true
-info.TextXAlignment = Enum.TextXAlignment.Left
-info.TextYAlignment = Enum.TextYAlignment.Top
-info.Text = "Đang tải..."
+local refreshButton = Instance.new("TextButton", frame)
+refreshButton.Text = "🔄 Làm mới"
+refreshButton.Size = UDim2.new(0, 120, 0, 35)
+refreshButton.Position = UDim2.new(1, -130, 0, 5)
+refreshButton.Font = Enum.Font.GothamBold
+refreshButton.TextSize = 14
+refreshButton.TextColor3 = Color3.new(1, 1, 1)
+refreshButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+Instance.new("UICorner", refreshButton).CornerRadius = UDim.new(0, 10)
 
--- Refresh Button
-local refreshBtn = Instance.new("TextButton", frame)
-refreshBtn.Size = UDim2.new(0, 130, 0, 35)
-refreshBtn.Position = UDim2.new(0, 10, 0, 10)
-refreshBtn.Text = "🔄 Làm mới"
-refreshBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-refreshBtn.Font = Enum.Font.GothamBold
-refreshBtn.TextSize = 14
-Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 10)
+-- Scrolling server list
+local scroll = Instance.new("ScrollingFrame", frame)
+scroll.Size = UDim2.new(1, -20, 1, -60)
+scroll.Position = UDim2.new(0, 10, 0, 50)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.ScrollBarThickness = 6
+scroll.BackgroundTransparency = 1
 
--- Server ít người
-local lowPopBtn = Instance.new("TextButton", frame)
-lowPopBtn.Size = UDim2.new(0, 180, 0, 35)
-lowPopBtn.Position = UDim2.new(0, 10, 1, -45)
-lowPopBtn.Text = "👥 Vào server ít người"
-lowPopBtn.BackgroundColor3 = Color3.fromRGB(30, 150, 30)
-lowPopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-lowPopBtn.Font = Enum.Font.GothamBold
-lowPopBtn.TextSize = 14
-Instance.new("UICorner", lowPopBtn).CornerRadius = UDim.new(0, 10)
+local layout = Instance.new("UIListLayout", scroll)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 6)
 
--- Server ping thấp
-local lowPingBtn = Instance.new("TextButton", frame)
-lowPingBtn.Size = UDim2.new(0, 180, 0, 35)
-lowPingBtn.Position = UDim2.new(1, -190, 1, -45)
-lowPingBtn.Text = "📶 Vào server ping thấp"
-lowPingBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
-lowPingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-lowPingBtn.Font = Enum.Font.GothamBold
-lowPingBtn.TextSize = 14
-Instance.new("UICorner", lowPingBtn).CornerRadius = UDim.new(0, 10)
+-- Hàm làm mới danh sách
+local function refreshServerList()
+	for _, child in ipairs(scroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
 
--- Toggle GUI Button
-local toggleBtn = Instance.new("TextButton", gui)
-toggleBtn.Size = UDim2.new(0, 130, 0, 35)
-toggleBtn.Position = UDim2.new(0, 20, 0, 20)
-toggleBtn.Text = "👁️ Ẩn/Hiện GUI"
-toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 14
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+	task.spawn(function()
+		local servers = {}
+		local cursor = ""
+		while #servers < 50 do -- load nhiều để chọn top ping thấp
+			local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?limit=100&sortOrder=Asc&cursor=%s", PLACE_ID, cursor)
+			local ok, data = pcall(function()
+				return HttpService:JSONDecode(game:HttpGet(url))
+			end)
+			if not ok or not data or not data.data then break end
 
--- Toggle GUI Logic
-toggleBtn.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
-end)
-
--- Hàm tìm server
-local function findBestServer(mode)
-	info.Text = "Đang tìm server..."
-	local cursor, best, value = "", nil, math.huge
-	while true do
-		local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?limit=100&sortOrder=Asc&cursor=%s", PLACE_ID, cursor)
-		local success, result = pcall(function()
-			return HttpService:JSONDecode(game:HttpGet(url))
-		end)
-		if not success or not result or not result.data then
-			info.Text = "Lỗi tải danh sách server."
-			return nil
-		end
-		for _, server in ipairs(result.data) do
-			if server.id ~= game.JobId then
-				local comp = (mode == "lowpop") and server.playing or (server.ping or math.huge)
-				if comp < value then
-					value = comp
-					best = server
+			for _, server in ipairs(data.data) do
+				if server.id ~= game.JobId then
+					table.insert(servers, server)
 				end
 			end
+
+			if data.nextPageCursor then
+				cursor = data.nextPageCursor
+			else
+				break
+			end
 		end
-		if result.nextPageCursor then
-			cursor = result.nextPageCursor
-		else
-			break
+
+		-- Ưu tiên sắp xếp theo ping nếu có
+		table.sort(servers, function(a, b)
+			return (a.ping or 9999) < (b.ping or 9999)
+		end)
+
+		local displayed = 0
+		for _, s in ipairs(servers) do
+			if displayed >= 10 then break end
+			local item = Instance.new("Frame", scroll)
+			item.Size = UDim2.new(1, 0, 0, 40)
+			item.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+			Instance.new("UICorner", item).CornerRadius = UDim.new(0, 8)
+
+			local label = Instance.new("TextLabel", item)
+			label.Text = string.format("👥 %d người | 📶 Ping: %s", s.playing, s.ping or "?")
+			label.Size = UDim2.new(1, -110, 1, 0)
+			label.Position = UDim2.new(0, 10, 0, 0)
+			label.BackgroundTransparency = 1
+			label.TextColor3 = Color3.new(1, 1, 1)
+			label.Font = Enum.Font.Gotham
+			label.TextSize = 14
+			label.TextXAlignment = Enum.TextXAlignment.Left
+
+			local joinBtn = Instance.new("TextButton", item)
+			joinBtn.Text = "Tham gia"
+			joinBtn.Size = UDim2.new(0, 90, 0, 30)
+			joinBtn.Position = UDim2.new(1, -95, 0.5, -15)
+			joinBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+			joinBtn.TextColor3 = Color3.new(1, 1, 1)
+			joinBtn.Font = Enum.Font.GothamBold
+			joinBtn.TextSize = 14
+			Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
+
+			joinBtn.MouseButton1Click:Connect(function()
+				TeleportService:TeleportToPlaceInstance(PLACE_ID, s.id, Players.LocalPlayer)
+			end)
+
+			displayed += 1
 		end
-	end
-	if best then
-		info.Text = string.format("👥 %d người | ID: %s | 📶 Ping: %s", best.playing, best.id, best.ping or "không rõ")
-		return best.id
-	else
-		info.Text = "Không tìm thấy server phù hợp."
-		return nil
-	end
+
+		scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+	end)
 end
 
--- Nút sự kiện
-refreshBtn.MouseButton1Click:Connect(function()
-	findBestServer("lowpop")
-end)
-
-lowPopBtn.MouseButton1Click:Connect(function()
-	local id = findBestServer("lowpop")
-	if id then wait(1) TeleportService:TeleportToPlaceInstance(PLACE_ID, id, Players.LocalPlayer) end
-end)
-
-lowPingBtn.MouseButton1Click:Connect(function()
-	local id = findBestServer("lowping")
-	if id then wait(1) TeleportService:TeleportToPlaceInstance(PLACE_ID, id, Players.LocalPlayer) end
-end)
-
--- Tự động tải server khi mở GUI
-task.spawn(function()
-	findBestServer("lowpop")
-end)
+refreshButton.MouseButton1Click:Connect(refreshServerList)
+refreshServerList()
