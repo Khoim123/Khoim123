@@ -1,53 +1,99 @@
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-
 local PLACE_ID = game.PlaceId
 
--- GUI setup
+-- Main GUI
 local gui = Instance.new("ScreenGui", Players.LocalPlayer:WaitForChild("PlayerGui"))
 gui.Name = "ServerListGui"
+gui.ResetOnSpawn = false
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 500, 0, 450)
-frame.Position = UDim2.new(0.5, -250, 0.5, -225)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+-- Toggle Button (ẩn/hiện)
+local toggleBtn = Instance.new("TextButton", gui)
+toggleBtn.Size = UDim2.new(0, 120, 0, 30)
+toggleBtn.Position = UDim2.new(0, 10, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleBtn.Text = "📂 Hiện server"
+toggleBtn.Font = Enum.Font.Gotham
+toggleBtn.TextSize = 14
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+
+-- Main frame
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 500, 0, 500)
+frame.Position = UDim2.new(0.5, -250, 0.5, -250)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 frame.BorderSizePixel = 0
+frame.Visible = false
 frame.Active = true
 frame.Draggable = true
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 16)
+frame.Parent = gui
 
+toggleBtn.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+	toggleBtn.Text = frame.Visible and "❌ Ẩn server" or "📂 Hiện server"
+end)
+
+-- Title
 local title = Instance.new("TextLabel", frame)
-title.Text = "🖧 Danh sách Server ít người (sắp xếp theo ping)"
-title.Size = UDim2.new(1, 0, 0, 40)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 22
-title.TextColor3 = Color3.new(1, 1, 1)
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0, 10, 0, 5)
 title.BackgroundTransparency = 1
+title.Text = "🖧 Danh sách Server (lọc khu vực)"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextXAlignment = Enum.TextXAlignment.Left
 
+-- Dropdown khu vực
+local regionLabel = Instance.new("TextLabel", frame)
+regionLabel.Size = UDim2.new(0, 80, 0, 30)
+regionLabel.Position = UDim2.new(0, 10, 0, 50)
+regionLabel.BackgroundTransparency = 1
+regionLabel.Text = "🌐 Khu vực:"
+regionLabel.TextColor3 = Color3.new(1,1,1)
+regionLabel.Font = Enum.Font.Gotham
+regionLabel.TextSize = 14
+regionLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local regionBox = Instance.new("TextBox", frame)
+regionBox.Size = UDim2.new(0, 140, 0, 30)
+regionBox.Position = UDim2.new(0, 100, 0, 50)
+regionBox.PlaceholderText = "vd: us-east, ap-south"
+regionBox.Text = ""
+regionBox.TextColor3 = Color3.new(1,1,1)
+regionBox.BackgroundColor3 = Color3.fromRGB(45,45,45)
+regionBox.Font = Enum.Font.Gotham
+regionBox.TextSize = 14
+Instance.new("UICorner", regionBox).CornerRadius = UDim.new(0, 6)
+
+-- Refresh Button
 local refreshButton = Instance.new("TextButton", frame)
 refreshButton.Text = "🔄 Làm mới"
-refreshButton.Size = UDim2.new(0, 120, 0, 35)
-refreshButton.Position = UDim2.new(1, -130, 0, 5)
+refreshButton.Size = UDim2.new(0, 120, 0, 30)
+refreshButton.Position = UDim2.new(1, -130, 0, 50)
 refreshButton.Font = Enum.Font.GothamBold
 refreshButton.TextSize = 14
 refreshButton.TextColor3 = Color3.new(1, 1, 1)
 refreshButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-Instance.new("UICorner", refreshButton).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", refreshButton).CornerRadius = UDim.new(0, 8)
 
--- Scrolling server list
+-- Scrolling list
 local scroll = Instance.new("ScrollingFrame", frame)
-scroll.Size = UDim2.new(1, -20, 1, -60)
-scroll.Position = UDim2.new(0, 10, 0, 50)
+scroll.Size = UDim2.new(1, -20, 1, -100)
+scroll.Position = UDim2.new(0, 10, 0, 90)
 scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.ScrollBarThickness = 6
 scroll.BackgroundTransparency = 1
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 local layout = Instance.new("UIListLayout", scroll)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Padding = UDim.new(0, 6)
 
--- Hàm làm mới danh sách
+-- Function to refresh list
 local function refreshServerList()
 	for _, child in ipairs(scroll:GetChildren()) do
 		if child:IsA("Frame") then child:Destroy() end
@@ -56,7 +102,7 @@ local function refreshServerList()
 	task.spawn(function()
 		local servers = {}
 		local cursor = ""
-		while #servers < 50 do -- load nhiều để chọn top ping thấp
+		while #servers < 100 do
 			local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?limit=100&sortOrder=Asc&cursor=%s", PLACE_ID, cursor)
 			local ok, data = pcall(function()
 				return HttpService:JSONDecode(game:HttpGet(url))
@@ -65,7 +111,12 @@ local function refreshServerList()
 
 			for _, server in ipairs(data.data) do
 				if server.id ~= game.JobId then
-					table.insert(servers, server)
+					-- Kiểm tra khu vực nếu có lọc
+					local regionFilter = regionBox.Text:lower()
+					local serverRegion = (server.regionCode or ""):lower()
+					if regionFilter == "" or serverRegion:find(regionFilter) then
+						table.insert(servers, server)
+					end
 				end
 			end
 
@@ -76,7 +127,6 @@ local function refreshServerList()
 			end
 		end
 
-		-- Ưu tiên sắp xếp theo ping nếu có
 		table.sort(servers, function(a, b)
 			return (a.ping or 9999) < (b.ping or 9999)
 		end)
@@ -90,7 +140,7 @@ local function refreshServerList()
 			Instance.new("UICorner", item).CornerRadius = UDim.new(0, 8)
 
 			local label = Instance.new("TextLabel", item)
-			label.Text = string.format("👥 %d người | 📶 Ping: %s", s.playing, s.ping or "?")
+			label.Text = string.format("👥 %d người | 📶 %s | 🌐 %s", s.playing, s.ping or "?", s.regionCode or "?")
 			label.Size = UDim2.new(1, -110, 1, 0)
 			label.Position = UDim2.new(0, 10, 0, 0)
 			label.BackgroundTransparency = 1
