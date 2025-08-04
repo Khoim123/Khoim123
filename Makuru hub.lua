@@ -390,5 +390,4 @@ function CheckLevel()
             QuestLv = 1; 
             NameMon = "Ship Deckhand"; 
             CFrameQ = CFrame.new(1040.2927246094, 125.08293151855, 32911.0390625); 
-            CFrameMon = CFrame.new(921.12365722656, 125.9839553833, 33088.328125); 
-            if
+            CFrameMon = CFrame.new(921.12365722656, 125.9839553833, 33088.328125);
