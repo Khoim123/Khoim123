@@ -14,22 +14,22 @@ local Window = Fluent:CreateWindow({
 
 local v16 = { 
     Home = v15:AddTab({ 
-        Title = "Thông Tin" 
+        Title = "Info" 
     }), 
     Main = v15:AddTab({ 
-        Title = "Cày" 
+        Title = "Farm" 
     }), 
     Sea = v15:AddTab({ 
-        Title = "Sự Kiện" 
+        Title = "Event" 
     }), 
     ITM = v15:AddTab({ 
-        Title = "Vật Phẩm" 
+        Title = "Item" 
     }), 
     Setting = v15:AddTab({ 
-        Title = "Cài Đặt" 
+        Title = "Settings" 
     }), 
     Status = v15:AddTab({ 
-        Title = "Máy Chủ" 
+        Title = "Server" 
     }), 
     Stats = v15:AddTab({ 
         Title = "Chỉ Số" 
