@@ -54,21 +54,21 @@ local AutoFarmToggle = AutoFarmSection:AddToggle("AutoFarmToggle", {
     end
 })
 
--- Dropdown chọn monster
 local MonsterDropdown = AutoFarmSection:AddDropdown("MonsterDropdown", {
-    Title = "Chọn quái (Để trống cho tự động)",
-    Values = {"Bandit", "Monkey", "Gorilla", "Pirate", "Brute", "Desert Bandit", "Desert Officer", "Snow Bandit", "Snowman"},
+    Title = "Chọn quái",
+    Description = "Để trống sẽ tự động chọn theo level",
+    Values = {"Tự động", "Bandit", "Monkey", "Gorilla", "Pirate", "Brute", "Desert Bandit", "Desert Officer", "Snow Bandit", "Snowman"},
     Multi = false,
-    Default = nil,
+    Default = "Tự động",
     Callback = function(value)
-        _G.SelectMonster = value
+        _G.SelectMonster = (value ~= "Tự động") and value or nil
+        print("Đã chọn:", _G.SelectMonster or "Tự động")
     end
 })
 
--- Slider khoảng cách tấn công
 local AttackDistanceSlider = AutoFarmSection:AddSlider("AttackDistanceSlider", {
     Title = "Khoảng cách tấn công",
-    Description = "Khoảng cách tối đa để tấn công quái",
+    Description = "Khoảng cách tối đa để tấn công quái (studs)",
     Default = 15,
     Min = 5,
     Max = 30,
@@ -78,9 +78,8 @@ local AttackDistanceSlider = AutoFarmSection:AddSlider("AttackDistanceSlider", {
     end
 })
 
--- Hiển thị trạng thái
-local StatusLabel = AutoFarmSection:AddParagraph("StatusParagraph", {
-    Title = "Trạng thái hiện tại:",
+local StatusDisplay = AutoFarmSection:AddParagraph("StatusDisplay", {
+    Title = "Trạng thái:",
     Content = "Đang chờ..."
 })
 
@@ -116,40 +115,30 @@ SettingsSection:AddButton({
     end
 })
 
--- Hàm kiểm tra level và chọn quái
 function CheckLevel()
     local level = player.Data.Level.Value
-    local Sea1 = true -- Giả định đang ở Sea1
     
     if _G.SelectMonster then
-        -- Nếu có chọn quái cụ thể
-        if _G.SelectMonster == "Bandit" then 
+        -- Code chọn quái cụ thể
+        if _G.SelectMonster == "Bandit" then
             return {
                 NameQuest = "BanditQuest1",
                 QuestLv = 1,
                 NameMon = "Bandit",
-                CFrameQ = CFrame.new(1060.9383544922, 16.455066680908, 1547.7841796875),
-                CFrameMon = CFrame.new(1038.5533447266, 41.296249389648, 1576.5098876953)
+                CFrameQ = CFrame.new(1060.93, 16.45, 1547.78),
+                CFrameMon = CFrame.new(1038.55, 41.29, 1576.50)
             }
         -- Thêm các quái khác...
         end
     else
-        -- Tự động chọn theo level
+        -- Code tự động chọn theo level
         if level <= 9 then
             return {
                 NameQuest = "BanditQuest1",
                 QuestLv = 1,
                 NameMon = "Bandit",
-                CFrameQ = CFrame.new(1060.9383544922, 16.455066680908, 1547.7841796875),
-                CFrameMon = CFrame.new(1038.5533447266, 41.296249389648, 1576.5098876953)
-            }
-        elseif level <= 14 then
-            return {
-                NameQuest = "JungleQuest",
-                QuestLv = 1,
-                NameMon = "Monkey",
-                CFrameQ = CFrame.new(-1601.6553955078, 36.85213470459, 153.38809204102),
-                CFrameMon = CFrame.new(-1448.1446533203, 50.851993560791, 63.60718536377)
+                CFrameQ = CFrame.new(1060.93, 16.45, 1547.78),
+                CFrameMon = CFrame.new(1038.55, 41.29, 1576.50)
             }
         -- Thêm các level khác...
         end
@@ -224,15 +213,22 @@ function AutoAttack(target)
     end
 end
 
--- Hàm chính Auto Farm
 function StartAutoFarm()
     while _G.AutoFarm do
         local questData = CheckLevel()
         if not questData then
-            StatusLabel:Set("Trạng thái hiện tại: Không tìm thấy nhiệm vụ phù hợp")
+            StatusDisplay:Set("Không tìm thấy nhiệm vụ phù hợp")
             task.wait(3)
             break
         end
+        
+        -- Cập nhật UI
+        local monsterName = _G.SelectMonster or "Tự động ("..questData.NameMon..")"
+        StatusDisplay:Set("Đang farm: "..monsterName)
+        
+        -- ... phần còn lại của hàm auto farm
+    end
+end
         
         -- Nhận nhiệm vụ
         StatusLabel:Set("Trạng thái hiện tại: Đang nhận nhiệm vụ...")
