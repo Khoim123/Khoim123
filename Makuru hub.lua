@@ -45,8 +45,9 @@ local AutoFarmSection = Tabs.Main:AddSection("Auto Farm Settings", {
     Side = "Left"
 })
 
+-- ✅ Sửa lỗi Paragraph - dùng Title đơn giản
 local StatusDisplay = AutoFarmSection:AddParagraph("StatusDisplay", {
-    Title = "Trạng thái:",
+    Title = "Status",
     Content = "Đang chờ..."
 })
 
@@ -236,6 +237,4 @@ Window:SelectTab(1)
 
 Fluent:Notify({
     Title = "Auto Farm Pro",
-    Content = "Hệ thống Auto Farm đã sẵn sàng!",
-    Duration = 5
-})
+    Content = "Hệ thống Auto
