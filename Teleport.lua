@@ -1,88 +1,30 @@
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
 local Window = Fluent:CreateWindow({
-    Title = "Teleport Gui"
+    Title = "Teleport"
     SubTitle = "by Lê Thanh Khôi",
     TabWidth = 160,
-    Size = UDim2.fromOffset(400, 350),
+    Size = UDim2.fromOffset(400, 300),
     Acrylic = true,
     Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.RightControl
-})
+    MinimizeKey = Enum.KeyCode.LeftControl
 
-local TeleportTab = Window:AddTab({
-    Title = "Teleport",
-    Icon = "rbxassetid://10734927979"
 })
+ = {
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
 
-local PositionSection = TeleportTab:AddSection({
-    Title = "Position (X, Y, Z)",
-    Side = "Left"
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+local Section = Main:AddSection("Position")
+Section:AddParagraph({
+    Title = "Paragraph"
 })
-
-local PositionInput = PositionSection:AddInput({
-    Title = "Coordinates",
-    Default = "0, 0, 0",
-    Placeholder = "Enter X,Y,Z (e.g. 100, 5, 50)",
-    Numeric = false,
-    Callback = function(Value) end
-})
-
-local SpeedSection = TeleportTab:AddSection({
-    Title = "Movement Settings",
-    Side = "Left"
-})
-
-local SpeedInput = SpeedSection:AddInput({
-    Title = "Tween Speed",
-    Default = "350",
-    Placeholder = "Enter speed (studs/s)",
-    Numeric = true,
-    Callback = function(Value) end
-})
-
-SpeedSection:AddButton({
-    Title = "Tween",
-    Description = "Teleport to specified position",
-    Callback = function()
-        local coordParts = {}
-        for part in string.gmatch(PositionInput.Value, "[^,%s]+") do
-            table.insert(coordParts, tonumber(part))
-        end
-        
-        if #coordParts == 3 then
-            local position = Vector3.new(coordParts[1], coordParts[2], coordParts[3])
-            local speed = tonumber(SpeedInput.Value) or 350
-            
-            local character = Players.LocalPlayer.Character
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                character.HumanoidRootPart.CFrame = CFrame.new(position)
-                character.Humanoid.WalkSpeed = speed
-                
-                Fluent:Notify({
-                    Title = "Success",
-                    Content = string.format("Teleported to %s", tostring(position)),
-                    Duration = 3
-                })
-            end
-        else
-            Fluent:Notify({
-                Title = "ERROR",
-                Content = "Invalid position format! Use X,Y,Z",
-                Duration = 3
-            })
-        end
-    end
-})
-
-TeleportTab:AddButton({
-    Title = "Toggle",
-    Callback = function()
-        Window:Toggle()
-    end
-})
-
-Window:SelectTab(1)
