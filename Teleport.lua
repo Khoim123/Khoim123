@@ -3,19 +3,11 @@ local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Fluent
-if not ReplicatedStorage:FindFirstChild("Fluent") then
-    warn("Fluent UI not found! Please install it in ReplicatedStorage")
-    return
-else
-    Fluent = require(ReplicatedStorage.Fluent)
-end
-
 local Window = Fluent:CreateWindow({
-    Title = "Teleport Tool " .. Fluent.Version,
-    SubTitle = "by YourName",
+    Title = "Teleport Gui"
+    SubTitle = "by Lê Thanh Khôi",
     TabWidth = 160,
-    Size = UDim2.fromOffset(400, 350), -- Kích thước nhỏ gọn hơn
+    Size = UDim2.fromOffset(400, 350),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.RightControl
@@ -63,7 +55,7 @@ SpeedSection:AddButton({
         
         if #coordParts == 3 then
             local position = Vector3.new(coordParts[1], coordParts[2], coordParts[3])
-            local speed = tonumber(SpeedInput.Value) or 16
+            local speed = tonumber(SpeedInput.Value) or 350
             
             local character = Players.LocalPlayer.Character
             if character and character:FindFirstChild("HumanoidRootPart") then
@@ -71,7 +63,7 @@ SpeedSection:AddButton({
                 character.Humanoid.WalkSpeed = speed
                 
                 Fluent:Notify({
-                    Title = "SUCCESS",
+                    Title = "Success",
                     Content = string.format("Teleported to %s", tostring(position)),
                     Duration = 3
                 })
@@ -87,7 +79,7 @@ SpeedSection:AddButton({
 })
 
 TeleportTab:AddButton({
-    Title = "TOGGLE UI",
+    Title = "Toggle",
     Callback = function()
         Window:Toggle()
     end
