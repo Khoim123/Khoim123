@@ -1,19 +1,23 @@
+-- Tạo GUI cơ bản cho Mobile Aimbot
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+-- Aimbot Variables
 local AimbotDistance = 80
 local Smoothness = 0.5
 local CharacterTilt = false
 local AimbotEnabled = false
 local SelectedPlayers = {}
 
+-- Tạo Main GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MobileAimbotGUI"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+-- Tạo nút toggle chính cho mobile
 local MainToggle = Instance.new("TextButton")
 MainToggle.Name = "MainToggle"
 MainToggle.Parent = ScreenGui
@@ -564,4 +568,41 @@ Title.InputBegan:Connect(function(input)
 end)
 
 Title.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.User
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        frameDragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if frameDragging and (input == frameDragInput) then
+        local delta = input.Position - frameDragStart
+        MainFrame.Position = UDim2.new(
+            frameStartPos.X.Scale, 
+            frameStartPos.X.Offset + delta.X, 
+            frameStartPos.Y.Scale, 
+            frameStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Auto cập nhật danh sách người chơi
+Players.PlayerAdded:Connect(function()
+    task.wait(1)
+    updatePlayerButtons()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    updatePlayerButtons()
+end)
+
+-- Khởi tạo
+updatePlayerButtons()
+updateStatus()
+
+warn("Mobile Aimbot GUI loaded successfully!")
+print("Features:")
+print("• Custom GUI with drag-and-drop")
+print("• Touch-friendly controls")
+print("• Working player selection")
+print("• Smooth sliders")
+print("• Mobile optimized")
