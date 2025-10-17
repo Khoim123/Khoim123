@@ -1,23 +1,19 @@
--- Tạo GUI cơ bản cho Mobile Aimbot
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
--- Aimbot Variables
 local AimbotDistance = 80
 local Smoothness = 0.5
 local CharacterTilt = false
 local AimbotEnabled = false
 local SelectedPlayers = {}
 
--- Tạo Main GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MobileAimbotGUI"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Tạo nút toggle chính cho mobile
 local MainToggle = Instance.new("TextButton")
 MainToggle.Name = "MainToggle"
 MainToggle.Parent = ScreenGui
