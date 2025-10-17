@@ -1,0 +1,571 @@
+-- Tạo GUI cơ bản cho Mobile Aimbot
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Aimbot Variables
+local AimbotDistance = 80
+local Smoothness = 0.5
+local CharacterTilt = false
+local AimbotEnabled = false
+local SelectedPlayers = {}
+
+-- Tạo Main GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MobileAimbotGUI"
+ScreenGui.Parent = game:GetService("CoreGui")
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Tạo nút toggle chính cho mobile
+local MainToggle = Instance.new("TextButton")
+MainToggle.Name = "MainToggle"
+MainToggle.Parent = ScreenGui
+MainToggle.BackgroundColor3 = Color3.fromRGB(0, 85, 255)
+MainToggle.BackgroundTransparency = 0.2
+MainToggle.Position = UDim2.new(0, 20, 0.5, -25)
+MainToggle.Size = UDim2.new(0, 50, 0, 50)
+MainToggle.Font = Enum.Font.SourceSansBold
+MainToggle.Text = "🎯"
+MainToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+MainToggle.TextSize = 20
+MainToggle.TextWrapped = true
+MainToggle.ZIndex = 100
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 12)
+Corner.Parent = MainToggle
+
+-- Tạo Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BackgroundTransparency = 0.1
+MainFrame.Position = UDim2.new(0.5, -190, 0.5, -160)
+MainFrame.Size = UDim2.new(0, 380, 0, 320)
+MainFrame.Visible = false
+
+local MainFrameCorner = Instance.new("UICorner")
+MainFrameCorner.CornerRadius = UDim.new(0, 8)
+MainFrameCorner.Parent = MainFrame
+
+local MainFrameStroke = Instance.new("UIStroke")
+MainFrameStroke.Color = Color3.fromRGB(100, 100, 100)
+MainFrameStroke.Thickness = 2
+MainFrameStroke.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Parent = MainFrame
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0, 0, 0, 10)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Font = Enum.Font.SourceSansBold
+Title.Text = "Mobile Aimbot Pro"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+
+-- Close Button
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Parent = MainFrame
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+CloseButton.Position = UDim2.new(1, -30, 0, 5)
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Font = Enum.Font.SourceSansBold
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 14
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 4)
+CloseCorner.Parent = CloseButton
+
+-- Tạo Scrolling Frame cho nội dung
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Name = "ScrollFrame"
+ScrollFrame.Parent = MainFrame
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.Position = UDim2.new(0, 10, 0, 50)
+ScrollFrame.Size = UDim2.new(1, -20, 1, -60)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 600)
+ScrollFrame.ScrollBarThickness = 4
+
+-- Aimbot Functions
+local character
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+-- Initialize character
+task.spawn(function()
+    character = getCharacter()
+    player.CharacterAdded:Connect(function(newChar)
+        character = newChar
+        task.wait(1)
+    end)
+end)
+
+local function calculateDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+local function isValidTarget(targetPlayer)
+    if not targetPlayer then return false end
+    if targetPlayer == player then return false end
+    
+    if next(SelectedPlayers) ~= nil then
+        return SelectedPlayers[targetPlayer.Name] == true
+    end
+    
+    return true
+end
+
+local function getNearestCharacter()
+    if not AimbotEnabled then return nil end
+    if not character then return nil end
+    
+    local closestCharacter = nil
+    local shortestDistance = math.huge
+    local playerRoot = character:FindFirstChild("HumanoidRootPart")
+    
+    if not playerRoot then return nil end
+
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if isValidTarget(targetPlayer) and targetPlayer.Character then
+            local targetChar = targetPlayer.Character
+            local humanoid = targetChar:FindFirstChild("Humanoid")
+            local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+            
+            if targetRoot and humanoid and humanoid.Health > 0 then
+                local distanceToTarget = calculateDistance(playerRoot.Position, targetRoot.Position)
+                if distanceToTarget < shortestDistance and distanceToTarget <= AimbotDistance then
+                    shortestDistance = distanceToTarget
+                    closestCharacter = targetChar
+                end
+            end
+        end
+    end
+
+    return closestCharacter
+end
+
+local function aimAtTarget(target)
+    if not character then return end
+    
+    local playerRoot = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    if playerRoot and target and target:FindFirstChild("HumanoidRootPart") then
+        local targetPosition = target.HumanoidRootPart.Position
+        
+        local desiredDirection
+        if CharacterTilt then
+            desiredDirection = (targetPosition - playerRoot.Position).Unit
+        else
+            desiredDirection = Vector3.new(
+                targetPosition.X - playerRoot.Position.X,
+                0,
+                targetPosition.Z - playerRoot.Position.Z
+            ).Unit
+        end
+        
+        local currentDirection = playerRoot.CFrame.LookVector
+        local smoothedDirection = currentDirection:Lerp(desiredDirection, Smoothness)
+        playerRoot.CFrame = CFrame.new(playerRoot.Position, playerRoot.Position + smoothedDirection)
+    end
+end
+
+-- Aimbot Loop
+local aimbotConnection
+local function toggleAimbot(state)
+    AimbotEnabled = state
+    
+    if aimbotConnection then
+        aimbotConnection:Disconnect()
+        aimbotConnection = nil
+    end
+    
+    if state then
+        aimbotConnection = RunService.Heartbeat:Connect(function()
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local humanoid = character:FindFirstChild("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local nearestCharacter = getNearestCharacter()
+                    if nearestCharacter then
+                        aimAtTarget(nearestCharacter)
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- Tạo các control UI
+local yOffset = 0
+local elementHeight = 40
+local spacing = 10
+
+-- Aimbot Toggle
+local AimbotToggle = Instance.new("TextButton")
+AimbotToggle.Name = "AimbotToggle"
+AimbotToggle.Parent = ScrollFrame
+AimbotToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+AimbotToggle.Position = UDim2.new(0, 0, 0, yOffset)
+AimbotToggle.Size = UDim2.new(1, 0, 0, elementHeight)
+AimbotToggle.Font = Enum.Font.SourceSans
+AimbotToggle.Text = "🔫 Bật Aimbot: TẮT"
+AimbotToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+AimbotToggle.TextSize = 14
+AimbotToggle.TextWrapped = true
+
+local AimbotCorner = Instance.new("UICorner")
+AimbotCorner.CornerRadius = UDim.new(0, 6)
+AimbotCorner.Parent = AimbotToggle
+
+yOffset = yOffset + elementHeight + spacing
+
+-- Distance Slider
+local DistanceLabel = Instance.new("TextLabel")
+DistanceLabel.Name = "DistanceLabel"
+DistanceLabel.Parent = ScrollFrame
+DistanceLabel.BackgroundTransparency = 1
+DistanceLabel.Position = UDim2.new(0, 0, 0, yOffset)
+DistanceLabel.Size = UDim2.new(1, 0, 0, 20)
+DistanceLabel.Font = Enum.Font.SourceSans
+DistanceLabel.Text = "📏 Khoảng cách: " .. AimbotDistance
+DistanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistanceLabel.TextSize = 14
+DistanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+yOffset = yOffset + 25
+
+local DistanceSlider = Instance.new("TextButton")
+DistanceSlider.Name = "DistanceSlider"
+DistanceSlider.Parent = ScrollFrame
+DistanceSlider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+DistanceSlider.Position = UDim2.new(0, 0, 0, yOffset)
+DistanceSlider.Size = UDim2.new(1, 0, 0, 20)
+DistanceSlider.Font = Enum.Font.SourceSans
+DistanceSlider.Text = ""
+DistanceSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistanceSlider.TextSize = 12
+
+local DistanceFill = Instance.new("Frame")
+DistanceFill.Name = "DistanceFill"
+DistanceFill.Parent = DistanceSlider
+DistanceFill.BackgroundColor3 = Color3.fromRGB(0, 85, 255)
+DistanceFill.Size = UDim2.new((AimbotDistance - 10) / 190, 0, 1, 0)
+
+local DistanceCorner = Instance.new("UICorner")
+DistanceCorner.CornerRadius = UDim.new(0, 4)
+DistanceCorner.Parent = DistanceSlider
+
+local FillCorner = Instance.new("UICorner")
+FillCorner.CornerRadius = UDim.new(0, 4)
+FillCorner.Parent = DistanceFill
+
+yOffset = yOffset + 30 + spacing
+
+-- Smoothness Slider
+local SmoothnessLabel = Instance.new("TextLabel")
+SmoothnessLabel.Name = "SmoothnessLabel"
+SmoothnessLabel.Parent = ScrollFrame
+SmoothnessLabel.BackgroundTransparency = 1
+SmoothnessLabel.Position = UDim2.new(0, 0, 0, yOffset)
+SmoothnessLabel.Size = UDim2.new(1, 0, 0, 20)
+SmoothnessLabel.Font = Enum.Font.SourceSans
+SmoothnessLabel.Text = "🎯 Độ mượt: " .. Smoothness
+SmoothnessLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+SmoothnessLabel.TextSize = 14
+SmoothnessLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+yOffset = yOffset + 25
+
+local SmoothnessSlider = Instance.new("TextButton")
+SmoothnessSlider.Name = "SmoothnessSlider"
+SmoothnessSlider.Parent = ScrollFrame
+SmoothnessSlider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+SmoothnessSlider.Position = UDim2.new(0, 0, 0, yOffset)
+SmoothnessSlider.Size = UDim2.new(1, 0, 0, 20)
+SmoothnessSlider.Font = Enum.Font.SourceSans
+SmoothnessSlider.Text = ""
+SmoothnessSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
+SmoothnessSlider.TextSize = 12
+
+local SmoothnessFill = Instance.new("Frame")
+SmoothnessFill.Name = "SmoothnessFill"
+SmoothnessFill.Parent = SmoothnessSlider
+SmoothnessFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+SmoothnessFill.Size = UDim2.new(Smoothness / 1, 0, 1, 0)
+
+local SmoothnessCorner = Instance.new("UICorner")
+SmoothnessCorner.CornerRadius = UDim.new(0, 4)
+SmoothnessCorner.Parent = SmoothnessSlider
+
+local SmoothnessFillCorner = Instance.new("UICorner")
+SmoothnessFillCorner.CornerRadius = UDim.new(0, 4)
+SmoothnessFillCorner.Parent = SmoothnessFill
+
+yOffset = yOffset + 30 + spacing
+
+-- Vertical Aim Toggle
+local TiltToggle = Instance.new("TextButton")
+TiltToggle.Name = "TiltToggle"
+TiltToggle.Parent = ScrollFrame
+TiltToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+TiltToggle.Position = UDim2.new(0, 0, 0, yOffset)
+TiltToggle.Size = UDim2.new(1, 0, 0, elementHeight)
+TiltToggle.Font = Enum.Font.SourceSans
+TiltToggle.Text = "📐 Ngắm theo chiều dọc: TẮT"
+TiltToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+TiltToggle.TextSize = 14
+TiltToggle.TextWrapped = true
+
+local TiltCorner = Instance.new("UICorner")
+TiltCorner.CornerRadius = UDim.new(0, 6)
+TiltCorner.Parent = TiltToggle
+
+yOffset = yOffset + elementHeight + spacing
+
+-- Player List
+local PlayerListLabel = Instance.new("TextLabel")
+PlayerListLabel.Name = "PlayerListLabel"
+PlayerListLabel.Parent = ScrollFrame
+PlayerListLabel.BackgroundTransparency = 1
+PlayerListLabel.Position = UDim2.new(0, 0, 0, yOffset)
+PlayerListLabel.Size = UDim2.new(1, 0, 0, 25)
+PlayerListLabel.Font = Enum.Font.SourceSansBold
+PlayerListLabel.Text = "👥 Danh sách người chơi:"
+PlayerListLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+PlayerListLabel.TextSize = 14
+PlayerListLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+yOffset = yOffset + 30
+
+-- Refresh Players Button
+local RefreshButton = Instance.new("TextButton")
+RefreshButton.Name = "RefreshButton"
+RefreshButton.Parent = ScrollFrame
+RefreshButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+RefreshButton.Position = UDim2.new(0, 0, 0, yOffset)
+RefreshButton.Size = UDim2.new(1, 0, 0, 35)
+RefreshButton.Font = Enum.Font.SourceSansBold
+RefreshButton.Text = "🔄 Làm mới danh sách"
+RefreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RefreshButton.TextSize = 14
+
+local RefreshCorner = Instance.new("UICorner")
+RefreshCorner.CornerRadius = UDim.new(0, 6)
+RefreshCorner.Parent = RefreshButton
+
+yOffset = yOffset + 45
+
+-- Player Buttons Container
+local PlayerButtonsFrame = Instance.new("Frame")
+PlayerButtonsFrame.Name = "PlayerButtonsFrame"
+PlayerButtonsFrame.Parent = ScrollFrame
+PlayerButtonsFrame.BackgroundTransparency = 1
+PlayerButtonsFrame.Position = UDim2.new(0, 0, 0, yOffset)
+PlayerButtonsFrame.Size = UDim2.new(1, 0, 0, 200)
+
+-- Status
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Name = "StatusLabel"
+StatusLabel.Parent = ScrollFrame
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Position = UDim2.new(0, 0, 0, yOffset + 210)
+StatusLabel.Size = UDim2.new(1, 0, 0, 40)
+StatusLabel.Font = Enum.Font.SourceSans
+StatusLabel.Text = "🟢 Trạng thái: Đang chờ"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatusLabel.TextSize = 14
+StatusLabel.TextWrapped = true
+
+-- Cập nhật kích thước canvas
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 260)
+
+-- Functions
+local function updatePlayerButtons()
+    -- Xóa các nút cũ
+    for _, child in pairs(PlayerButtonsFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    -- Tạo nút mới
+    local buttonY = 0
+    for _, targetPlayer in pairs(Players:GetPlayers()) do
+        if targetPlayer ~= player then
+            local playerButton = Instance.new("TextButton")
+            playerButton.Name = targetPlayer.Name
+            playerButton.Parent = PlayerButtonsFrame
+            playerButton.BackgroundColor3 = SelectedPlayers[targetPlayer.Name] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
+            playerButton.Position = UDim2.new(0, 0, 0, buttonY)
+            playerButton.Size = UDim2.new(1, 0, 0, 30)
+            playerButton.Font = Enum.Font.SourceSans
+            playerButton.Text = targetPlayer.Name
+            playerButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            playerButton.TextSize = 12
+            playerButton.TextWrapped = true
+            
+            local playerCorner = Instance.new("UICorner")
+            playerCorner.CornerRadius = UDim.new(0, 4)
+            playerCorner.Parent = playerButton
+            
+            playerButton.MouseButton1Click:Connect(function()
+                SelectedPlayers[targetPlayer.Name] = not SelectedPlayers[targetPlayer.Name]
+                playerButton.BackgroundColor3 = SelectedPlayers[targetPlayer.Name] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
+                updateStatus()
+            end)
+            
+            buttonY = buttonY + 35
+        end
+    end
+    
+    PlayerButtonsFrame.Size = UDim2.new(1, 0, 0, buttonY)
+end
+
+local function updateStatus()
+    if AimbotEnabled then
+        local targetCount = 0
+        for _ in pairs(SelectedPlayers) do
+            targetCount = targetCount + 1
+        end
+        
+        if targetCount > 0 then
+            StatusLabel.Text = "🟢 Aimbot ĐANG BẬT - " .. targetCount .. " mục tiêu"
+        else
+            StatusLabel.Text = "🟢 Aimbot ĐANG BẬT - Tất cả mục tiêu"
+        end
+    else
+        StatusLabel.Text = "🔴 Aimbot ĐANG TẮT"
+    end
+end
+
+-- Event Handlers
+MainToggle.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+end)
+
+AimbotToggle.MouseButton1Click:Connect(function()
+    AimbotEnabled = not AimbotEnabled
+    AimbotToggle.Text = "🔫 Bật Aimbot: " .. (AimbotEnabled and "BẬT" or "TẮT")
+    AimbotToggle.BackgroundColor3 = AimbotEnabled and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
+    toggleAimbot(AimbotEnabled)
+    updateStatus()
+end)
+
+TiltToggle.MouseButton1Click:Connect(function()
+    CharacterTilt = not CharacterTilt
+    TiltToggle.Text = "📐 Ngắm theo chiều dọc: " .. (CharacterTilt and "BẬT" or "TẮT")
+    TiltToggle.BackgroundColor3 = CharacterTilt and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
+end)
+
+RefreshButton.MouseButton1Click:Connect(function()
+    updatePlayerButtons()
+end)
+
+-- Slider handlers
+DistanceSlider.MouseButton1Down:Connect(function()
+    local connection
+    connection = UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            local xPos = math.clamp(input.Position.X - DistanceSlider.AbsolutePosition.X, 0, DistanceSlider.AbsoluteSize.X)
+            local percent = xPos / DistanceSlider.AbsoluteSize.X
+            AimbotDistance = math.floor(10 + percent * 190)
+            DistanceFill.Size = UDim2.new(percent, 0, 1, 0)
+            DistanceLabel.Text = "📏 Khoảng cách: " .. AimbotDistance
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            connection:Disconnect()
+        end
+    end)
+end)
+
+SmoothnessSlider.MouseButton1Down:Connect(function()
+    local connection
+    connection = UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            local xPos = math.clamp(input.Position.X - SmoothnessSlider.AbsolutePosition.X, 0, SmoothnessSlider.AbsoluteSize.X)
+            local percent = xPos / SmoothnessSlider.AbsoluteSize.X
+            Smoothness = math.floor((percent * 0.9 + 0.1) * 10) / 10
+            SmoothnessFill.Size = UDim2.new(percent, 0, 1, 0)
+            SmoothnessLabel.Text = "🎯 Độ mượt: " .. Smoothness
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            connection:Disconnect()
+        end
+    end)
+end)
+
+-- Kéo thả cho MainToggle
+local dragging = false
+local dragInput, dragStart, startPos
+
+MainToggle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainToggle.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+MainToggle.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input == dragInput) then
+        local delta = input.Position - dragStart
+        MainToggle.Position = UDim2.new(
+            startPos.X.Scale, 
+            startPos.X.Offset + delta.X, 
+            startPos.Y.Scale, 
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Kéo thả cho MainFrame
+local frameDragging = false
+local frameDragInput, frameDragStart, frameStartPos
+
+Title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        frameDragging = true
+        frameDragStart = input.Position
+        frameStartPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                frameDragging = false
+            end
+        end)
+    end
+end)
+
+Title.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.User
