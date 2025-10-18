@@ -5,7 +5,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 -- Aimbot Variables
-local AimbotDistance = 100 -- Tăng khoảng cách mặc định
+local AimbotDistance = 50 -- Tăng khoảng cách mặc định
 local Smoothness = 0.5
 local CharacterTilt = false
 local AimbotEnabled = false
