@@ -5,7 +5,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 -- Aimbot Variables
-local AimbotDistance = 50 -- Tăng khoảng cách mặc định
+local AimbotDistance = 50 -- Khoảng cách mặc định
 local Smoothness = 0.5
 local CharacterTilt = false
 local AimbotEnabled = false
@@ -115,9 +115,10 @@ end
 local function isValidTarget(targetPlayer)
     if not targetPlayer then return false end
     if targetPlayer == player then return false end
+    if not targetPlayer:IsA("Player") then return false end
 
     if next(SelectedPlayers) ~= nil then
-        return SelectedPlayers[targetPlayer.Name] == true
+        return SelectedPlayers[targetPlayer.UserId] == true
     end
 
     return true
@@ -134,7 +135,7 @@ local function getNearestCharacter()
     if not playerRoot then return nil end
 
     for _, targetPlayer in ipairs(Players:GetPlayers()) do
-        if isValidTarget(targetPlayer) and targetPlayer.Character then
+        if targetPlayer and isValidTarget(targetPlayer) and targetPlayer.Character then
             local targetChar = targetPlayer.Character
             local humanoid = targetChar:FindFirstChild("Humanoid")
             local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
@@ -191,14 +192,28 @@ local function toggleAimbot(state)
 
     if state then
         aimbotConnection = RunService.Heartbeat:Connect(function()
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                local humanoid = character:FindFirstChild("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    local nearestCharacter = getNearestCharacter()
-                    if nearestCharacter then
-                        aimAtTarget(nearestCharacter)
+            local success, errorMsg = pcall(function()
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if humanoid and humanoid.Health > 0 then
+                        local nearestCharacter = getNearestCharacter()
+                        if nearestCharacter then
+                            aimAtTarget(nearestCharacter)
+                        end
                     end
                 end
+            end)
+            
+            if not success then
+                warn("Aimbot error: " .. tostring(errorMsg))
+                AimbotEnabled = false
+                if aimbotConnection then
+                    aimbotConnection:Disconnect()
+                    aimbotConnection = nil
+                end
+                AimbotToggle.Text = "Bật Aimbot: TẮT"
+                AimbotToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                StatusLabel.Text = "🔴 LỖI - Aimbot đã tự động tắt"
             end
         end)
     end
@@ -228,7 +243,7 @@ AimbotCorner.Parent = AimbotToggle
 
 yOffset = yOffset + elementHeight + spacing
 
--- Distance Slider - ĐÃ SỬA ĐỂ HỖ TRỢ TỐI ĐA 2000 STUD
+-- Ô NHẬP KHOẢNG CÁCH (1-10000 STUDS)
 local DistanceLabel = Instance.new("TextLabel")
 DistanceLabel.Name = "DistanceLabel"
 DistanceLabel.Parent = ScrollFrame
@@ -236,40 +251,31 @@ DistanceLabel.BackgroundTransparency = 1
 DistanceLabel.Position = UDim2.new(0, 0, 0, yOffset)
 DistanceLabel.Size = UDim2.new(1, 0, 0, 20)
 DistanceLabel.Font = Enum.Font.SourceSans
-DistanceLabel.Text = "Khoảng cách: " .. AimbotDistance
+DistanceLabel.Text = "Khoảng cách (studs):"
 DistanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 DistanceLabel.TextSize = 14
 DistanceLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 yOffset = yOffset + 25
 
-local DistanceSlider = Instance.new("TextButton")
-DistanceSlider.Name = "DistanceSlider"
-DistanceSlider.Parent = ScrollFrame
-DistanceSlider.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-DistanceSlider.Position = UDim2.new(0, 0, 0, yOffset)
-DistanceSlider.Size = UDim2.new(1, 0, 0, 20)
-DistanceSlider.Font = Enum.Font.SourceSans
-DistanceSlider.Text = ""
-DistanceSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-DistanceSlider.TextSize = 12
+local DistanceInput = Instance.new("TextBox")
+DistanceInput.Name = "DistanceInput"
+DistanceInput.Parent = ScrollFrame
+DistanceInput.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+DistanceInput.Position = UDim2.new(0, 0, 0, yOffset)
+DistanceInput.Size = UDim2.new(1, 0, 0, 35)
+DistanceInput.Font = Enum.Font.SourceSans
+DistanceInput.PlaceholderText = "Nhập khoảng cách (1-10000 studs)"
+DistanceInput.Text = tostring(AimbotDistance)
+DistanceInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistanceInput.TextSize = 14
+DistanceInput.ClearTextOnFocus = false
 
-local DistanceFill = Instance.new("Frame")
-DistanceFill.Name = "DistanceFill"
-DistanceFill.Parent = DistanceSlider
-DistanceFill.BackgroundColor3 = Color3.fromRGB(0, 85, 255)
--- Sửa để hỗ trợ từ 10 đến 2000 studs
-DistanceFill.Size = UDim2.new((AimbotDistance - 10) / 490, 0, 1, 0)
+local DistanceInputCorner = Instance.new("UICorner")
+DistanceInputCorner.CornerRadius = UDim.new(0, 6)
+DistanceInputCorner.Parent = DistanceInput
 
-local DistanceCorner = Instance.new("UICorner")
-DistanceCorner.CornerRadius = UDim.new(0, 4)
-DistanceCorner.Parent = DistanceSlider
-
-local FillCorner = Instance.new("UICorner")
-FillCorner.CornerRadius = UDim.new(0, 4)
-FillCorner.Parent = DistanceFill
-
-yOffset = yOffset + 30 + spacing
+yOffset = yOffset + 45 + spacing
 
 -- Smoothness Slider
 local SmoothnessLabel = Instance.new("TextLabel")
@@ -391,60 +397,108 @@ ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 260)
 
 -- Functions
 local function updatePlayerButtons()
-    -- Xóa các nút cũ
-    for _, child in pairs(PlayerButtonsFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            child:Destroy()
+    local success, errorMsg = pcall(function()
+        -- Xóa các nút cũ
+        for _, child in pairs(PlayerButtonsFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
         end
-    end
 
-    -- Tạo nút mới
-    local buttonY = 0
-    for _, targetPlayer in pairs(Players:GetPlayers()) do
-        if targetPlayer ~= player then
-            local playerButton = Instance.new("TextButton")
-            playerButton.Name = targetPlayer.Name
-            playerButton.Parent = PlayerButtonsFrame
-            playerButton.BackgroundColor3 = SelectedPlayers[targetPlayer.Name] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
-            playerButton.Position = UDim2.new(0, 0, 0, buttonY)
-            playerButton.Size = UDim2.new(1, 0, 0, 30)
-            playerButton.Font = Enum.Font.SourceSans
-            playerButton.Text = targetPlayer.Name
-            playerButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            playerButton.TextSize = 12
-            playerButton.TextWrapped = true
+        -- Tạo nút mới
+        local buttonY = 0
+        for _, targetPlayer in pairs(Players:GetPlayers()) do
+            if targetPlayer ~= player and targetPlayer:IsA("Player") then
+                local playerButton = Instance.new("TextButton")
+                playerButton.Name = "PlayerBtn_" .. targetPlayer.UserId
+                playerButton.Parent = PlayerButtonsFrame
+                playerButton.BackgroundColor3 = SelectedPlayers[targetPlayer.UserId] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
+                playerButton.Position = UDim2.new(0, 0, 0, buttonY)
+                playerButton.Size = UDim2.new(1, 0, 0, 30)
+                playerButton.Font = Enum.Font.SourceSans
+                playerButton.Text = targetPlayer.Name
+                playerButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+                playerButton.TextSize = 12
+                playerButton.TextWrapped = true
 
-            local playerCorner = Instance.new("UICorner")
-            playerCorner.CornerRadius = UDim.new(0, 4)
-            playerCorner.Parent = playerButton
+                local playerCorner = Instance.new("UICorner")
+                playerCorner.CornerRadius = UDim.new(0, 4)
+                playerCorner.Parent = playerButton
 
-            playerButton.MouseButton1Click:Connect(function()
-                SelectedPlayers[targetPlayer.Name] = not SelectedPlayers[targetPlayer.Name]
-                playerButton.BackgroundColor3 = SelectedPlayers[targetPlayer.Name] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
-                updateStatus()
-            end)
+                -- SỬA LỖI QUAN TRỌNG: Sử dụng UserId thay vì Name
+                playerButton.MouseButton1Click:Connect(function()
+                    local clickSuccess, clickError = pcall(function()
+                        if targetPlayer and targetPlayer.Parent then
+                            SelectedPlayers[targetPlayer.UserId] = not SelectedPlayers[targetPlayer.UserId]
+                            playerButton.BackgroundColor3 = SelectedPlayers[targetPlayer.UserId] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
+                            updateStatus()
+                        else
+                            -- Người chơi không còn tồn tại, làm mới danh sách
+                            updatePlayerButtons()
+                        end
+                    end)
+                    
+                    if not clickSuccess then
+                        warn("Error selecting player: " .. tostring(clickError))
+                    end
+                end)
 
-            buttonY = buttonY + 35
+                buttonY = buttonY + 35
+            end
         end
-    end
 
-    PlayerButtonsFrame.Size = UDim2.new(1, 0, 0, buttonY)
+        PlayerButtonsFrame.Size = UDim2.new(1, 0, 0, buttonY)
+    end)
+    
+    if not success then
+        warn("Error updating player buttons: " .. tostring(errorMsg))
+    end
 end
 
 local function updateStatus()
-    if AimbotEnabled then
-        local targetCount = 0
-        for _ in pairs(SelectedPlayers) do
-            targetCount = targetCount + 1
-        end
+    local success, errorMsg = pcall(function()
+        if AimbotEnabled then
+            local targetCount = 0
+            for _ in pairs(SelectedPlayers) do
+                targetCount = targetCount + 1
+            end
 
-        if targetCount > 0 then
-            StatusLabel.Text = "🟢 Aimbot ĐANG BẬT - " .. targetCount .. " mục tiêu - Tầm ngắm: " .. AimbotDistance
+            if targetCount > 0 then
+                StatusLabel.Text = "🟢 Aimbot ĐANG BẬT - " .. targetCount .. " mục tiêu - Tầm ngắm: " .. AimbotDistance .. " studs"
+            else
+                StatusLabel.Text = "🟢 Aimbot ĐANG BẬT - Tất cả mục tiêu - Tầm ngắm: " .. AimbotDistance .. " studs"
+            end
         else
-            StatusLabel.Text = "🟢 Aimbot ĐANG BẬT - Tất cả mục tiêu - Tầm ngắm: " .. AimbotDistance
+            StatusLabel.Text = "🔴 Aimbot ĐANG TẮT - Tầm ngắm: " .. AimbotDistance .. " studs"
         end
+    end)
+    
+    if not success then
+        warn("Error in updateStatus: " .. tostring(errorMsg))
+    end
+end
+
+-- HÀM XỬ LÝ KHI NHẬP KHOẢNG CÁCH (1-10000 STUDS)
+local function handleDistanceInput()
+    local inputText = DistanceInput.Text
+    local newDistance = tonumber(inputText)
+    
+    if newDistance then
+        newDistance = math.clamp(newDistance, 1, 10000)
+        AimbotDistance = newDistance
+        DistanceInput.Text = tostring(newDistance)
+        updateStatus()
+        
+        -- Hiệu ứng visual khi nhập thành công
+        DistanceInput.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+        task.wait(0.3)
+        DistanceInput.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     else
-        StatusLabel.Text = "🔴 Aimbot ĐANG TẮT - Tầm ngắm: " .. AimbotDistance
+        -- Hiệu ứng visual khi nhập không hợp lệ
+        DistanceInput.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+        DistanceInput.Text = tostring(AimbotDistance)
+        task.wait(0.3)
+        DistanceInput.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     end
 end
 
@@ -475,28 +529,19 @@ RefreshButton.MouseButton1Click:Connect(function()
     updatePlayerButtons()
 end)
 
--- Slider handlers - ĐÃ SỬA ĐỂ HỖ TRỢ TỐI ĐA 2000 STUD
-DistanceSlider.MouseButton1Down:Connect(function()
-    local connection
-    connection = UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local xPos = math.clamp(input.Position.X - DistanceSlider.AbsolutePosition.X, 0, DistanceSlider.AbsoluteSize.X)
-            local percent = xPos / DistanceSlider.AbsoluteSize.X
-            -- Thay đổi từ 190 thành 990 để hỗ trợ từ 10 đến 1000 studs
-            AimbotDistance = math.floor(10 + percent * 990)
-            DistanceFill.Size = UDim2.new(percent, 0, 1, 0)
-            DistanceLabel.Text = "Khoảng cách: " .. AimbotDistance
-            updateStatus()
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            connection:Disconnect()
-        end
-    end)
+-- XỬ LÝ Ô NHẬP KHOẢNG CÁCH
+DistanceInput.FocusLost:Connect(function(enterPressed)
+    handleDistanceInput()
 end)
 
+DistanceInput:GetPropertyChangedSignal("Text"):Connect(function()
+    if string.find(DistanceInput.Text, "\n") then
+        DistanceInput.Text = string.gsub(DistanceInput.Text, "\n", "")
+        handleDistanceInput()
+    end
+end)
+
+-- Smoothness Slider
 SmoothnessSlider.MouseButton1Down:Connect(function()
     local connection
     connection = UserInputService.InputChanged:Connect(function(input)
@@ -589,12 +634,15 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- Auto cập nhật danh sách người chơi
-Players.PlayerAdded:Connect(function()
+Players.PlayerAdded:Connect(function(newPlayer)
     task.wait(1)
     updatePlayerButtons()
 end)
 
-Players.PlayerRemoving:Connect(function()
+Players.PlayerRemoving:Connect(function(leftPlayer)
+    if SelectedPlayers[leftPlayer.UserId] then
+        SelectedPlayers[leftPlayer.UserId] = nil
+    end
     updatePlayerButtons()
 end)
 
@@ -603,10 +651,8 @@ updatePlayerButtons()
 updateStatus()
 
 warn("Mobile Aimbot GUI loaded successfully!")
-print("Features:")
-print("• Custom GUI with drag-and-drop")
-print("• Touch-friendly controls")
-print("• Working player selection")
-print("• Smooth sliders")
-print("• Mobile optimized")
-print("• MAX AIMBOT DISTANCE: 2000 Studs")
+print("Fixed Features:")
+print("• Using UserId instead of Name for player selection")
+print("• Better error handling in player selection")
+print("• MAX AIMBOT DISTANCE: 10000 Studs")
+print("• MIN AIMBOT DISTANCE: 1 Stud")
