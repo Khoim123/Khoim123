@@ -258,8 +258,8 @@ local DistanceFill = Instance.new("Frame")
 DistanceFill.Name = "DistanceFill"
 DistanceFill.Parent = DistanceSlider
 DistanceFill.BackgroundColor3 = Color3.fromRGB(0, 85, 255)
--- Sửa để hỗ trợ từ 10 đến 500 studs
-DistanceFill.Size = UDim2.new((AimbotDistance - 10) / 490, 0, 1, 0)
+-- Sửa để hỗ trợ từ 10 đến 2000 studs
+DistanceFill.Size = UDim2.new((AimbotDistance - 10) / 1990, 0, 1, 0)
 
 local DistanceCorner = Instance.new("UICorner")
 DistanceCorner.CornerRadius = UDim.new(0, 4)
@@ -459,7 +459,7 @@ end)
 
 AimbotToggle.MouseButton1Click:Connect(function()
     AimbotEnabled = not AimbotEnabled
-    AimbotToggle.Text = "🔫 Bật Aimbot: " .. (AimbotEnabled and "BẬT" or "TẮT")
+    AimbotToggle.Text = "Bật Aimbot: " .. (AimbotEnabled and "BẬT" or "TẮT")
     AimbotToggle.BackgroundColor3 = AimbotEnabled and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
     toggleAimbot(AimbotEnabled)
     updateStatus()
@@ -467,7 +467,7 @@ end)
 
 TiltToggle.MouseButton1Click:Connect(function()
     CharacterTilt = not CharacterTilt
-    TiltToggle.Text = "📐 Ngắm theo chiều dọc: " .. (CharacterTilt and "BẬT" or "TẮT")
+    TiltToggle.Text = "Ngắm theo chiều dọc: " .. (CharacterTilt and "BẬT" or "TẮT")
     TiltToggle.BackgroundColor3 = CharacterTilt and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(60, 60, 60)
 end)
 
@@ -475,7 +475,7 @@ RefreshButton.MouseButton1Click:Connect(function()
     updatePlayerButtons()
 end)
 
--- Slider handlers - ĐÃ SỬA ĐỂ HỖ TRỢ TỐI ĐA 500 STUD
+-- Slider handlers - ĐÃ SỬA ĐỂ HỖ TRỢ TỐI ĐA 2000 STUD
 DistanceSlider.MouseButton1Down:Connect(function()
     local connection
     connection = UserInputService.InputChanged:Connect(function(input)
@@ -485,7 +485,7 @@ DistanceSlider.MouseButton1Down:Connect(function()
             -- Thay đổi từ 190 thành 990 để hỗ trợ từ 10 đến 1000 studs
             AimbotDistance = math.floor(10 + percent * 990)
             DistanceFill.Size = UDim2.new(percent, 0, 1, 0)
-            DistanceLabel.Text = "📏 Khoảng cách: " .. AimbotDistance
+            DistanceLabel.Text = "Khoảng cách: " .. AimbotDistance
             updateStatus()
         end
     end)
@@ -505,7 +505,7 @@ SmoothnessSlider.MouseButton1Down:Connect(function()
             local percent = xPos / SmoothnessSlider.AbsoluteSize.X
             Smoothness = math.floor((percent * 0.9 + 0.1) * 10) / 10
             SmoothnessFill.Size = UDim2.new(percent, 0, 1, 0)
-            SmoothnessLabel.Text = "🎯 Độ mượt: " .. Smoothness
+            SmoothnessLabel.Text = "Độ mượt: " .. Smoothness
         end
     end)
 
@@ -609,4 +609,4 @@ print("• Touch-friendly controls")
 print("• Working player selection")
 print("• Smooth sliders")
 print("• Mobile optimized")
-print("• MAX AIMBOT DISTANCE: 1000 Studs")
+print("• MAX AIMBOT DISTANCE: 2000 Studs")
