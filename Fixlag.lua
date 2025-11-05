@@ -1,0 +1,84 @@
+--[[
+Script Mượt Roblox Tối Ưu: FPS & Ping "FPS: số | Ping: sốms" Góc Phải Trên
+Sửa lỗi EnvironmentExposure, giữ đồ họa, xóa effects động.
+]]
+
+local RS = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local Stats = game:GetService("Stats")
+local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Giảm Đồ Họa Max (Giữ Đồ Họa, Sửa Lỗi Property)
+settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+Lighting.GlobalShadows = false
+Lighting.FogEnd = 9e9
+Lighting.Brightness = 1
+Lighting.EnvironmentDiffuseScale = 0
+Lighting.EnvironmentSpecularScale = 0
+Lighting.Ambient = Color3.new(0.5, 0.5, 0.5) -- Thay Exposure, sáng tự nhiên
+for _, effect in pairs(Lighting:GetChildren()) do
+    if effect:IsA("PostEffect") or effect:IsA("Atmosphere") then
+        effect.Enabled = false
+    end
+end
+Workspace.StreamingEnabled = true
+if setfpscap then setfpscap(999) end
+
+-- Xóa Hiệu Ứng Động (Loop 0.5s)
+local function deleteEffects()
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("Explosion") or obj:IsA("Attachment") then
+            obj:Destroy()
+        end
+    end
+end
+deleteEffects()
+RS.Heartbeat:Connect(function()
+    wait(0.5)
+    deleteEffects()
+end)
+
+-- FPS & Ping: Nền Đen Chữ Trắng, Góc Phải Trên, Kéo Thả
+local fpsGui = Instance.new("ScreenGui")
+fpsGui.Name = "FPSPingGui"
+fpsGui.ResetOnSpawn = false
+fpsGui.IgnoreGuiInset = true
+fpsGui.DisplayOrder = 999
+fpsGui.Parent = playerGui
+
+local fpsFrame = Instance.new("Frame")
+fpsFrame.Size = UDim2.new(0, 70, 0, 35)
+fpsFrame.Position = UDim2.new(1, -80, 0, 10)
+fpsFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+fpsFrame.BackgroundTransparency = 0.4
+fpsFrame.BorderSizePixel = 0
+fpsFrame.Active = true
+fpsFrame.Draggable = true
+fpsFrame.Parent = fpsGui
+
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Size = UDim2.new(1, 0, 1, 0)
+fpsLabel.BackgroundTransparency = 1
+fpsLabel.Text = "FPS: 0 | Ping: 0ms"
+fpsLabel.TextColor3 = Color3.new(1, 1, 1)
+fpsLabel.TextScaled = true
+fpsLabel.Font = Enum.Font.SourceSans
+fpsLabel.TextStrokeTransparency = 0.5
+fpsLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+fpsLabel.Parent = fpsFrame
+
+-- Cập Nhật FPS & Ping Mỗi Giây
+local lastTime = tick()
+local frameCount = 0
+RS.Heartbeat:Connect(function()
+    frameCount = frameCount + 1
+    local currentTime = tick()
+    if currentTime - lastTime >= 1 then
+        local fps = math.floor(frameCount / (currentTime - lastTime))
+        local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0
+        fpsLabel.Text = "FPS: " .. fps .. " | Ping: " .. ping .. "ms"
+        frameCount = 0
+        lastTime = currentTime
+    end
+end)
