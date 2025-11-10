@@ -1,142 +1,202 @@
--- Blox Fruits FPS Booster Script
--- Tối ưu hóa đồ họa để tăng FPS
+-- Blox Fruits FPS Booster Script - Phiên bản Cải tiến v2.0
+-- Tối ưu hóa đồ họa để tăng FPS (Hỗ trợ mobile/low-end PC)
+-- Tác giả: Cải tiến từ script gốc
 
 local Lighting = game:GetService("Lighting")
 local Terrain = workspace.Terrain
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserSettings = UserSettings()
+local GameSettings = UserSettings:GetService("UserGameSettings")
+local StarterGui = game:GetService("StarterGui")
+
+-- Config dễ chỉnh
+local CONFIG = {
+    EnableFPSCounter = true,  -- Bật/tắt FPS UI
+    TargetQuality = Enum.QualityLevel.Level01,  -- Mức chất lượng (Level01 thấp nhất)
+    GCInterval = 30,  -- Giây giữa các lần GC
+    DebounceTime = 0.1  -- Delay cho DescendantAdded để tránh spam
+}
+
+-- Biến toàn cục
+local isBoosted = false
+local lastDebounce = 0
+local lastTime = tick()
+local fpsHistory = {}  -- Để tính FPS trung bình mượt hơn
 
 -- Thông báo bắt đầu
-print("=== FPS Booster đang khởi động ===")
+print("=== FPS Booster v2.0 đang khởi động ===")
 
--- 1. TẮT CÁC HIỆU ỨNG ÁNH SÁNG
-Lighting.GlobalShadows = false
-Lighting.FogEnd = 9e9
-Lighting.Brightness = 0
-
--- Xóa các hiệu ứng ánh sáng
-for _, effect in pairs(Lighting:GetChildren()) do
-    if effect:IsA("BlurEffect") or 
-       effect:IsA("SunRaysEffect") or 
-       effect:IsA("ColorCorrectionEffect") or 
-       effect:IsA("BloomEffect") or
-       effect:IsA("DepthOfFieldEffect") then
-        effect.Enabled = false
-    end
-end
-
--- 2. TỐI ƯU TERRAIN
-settings().Rendering.QualityLevel = "Level01"
-Terrain.WaterWaveSize = 0
-Terrain.WaterWaveSpeed = 0
-Terrain.WaterReflectance = 0
-Terrain.WaterTransparency = 0
-
--- 3. TỐI ƯU TẤT CẢ CÁC PARTS
+-- Hàm tối ưu Part (cải tiến: loại bỏ trùng lặp, thêm pcall)
 local function optimizePart(v)
-    if v:IsA("Part") or v:IsA("MeshPart") or v:IsA("UnionOperation") then
-        v.Material = Enum.Material.Plastic
-        v.Reflectance = 0
-        v.CastShadow = false
-    elseif v:IsA("Decal") or v:IsA("Texture") then
-        v.Transparency = 1
-    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
-        v.Enabled = false
-    elseif v:IsA("Explosion") then
-        v.BlastPressure = 1
-        v.BlastRadius = 1
-    elseif v:IsA("Fire") or v:IsA("SpotLight") or v:IsA("Smoke") or v:IsA("Sparkles") then
-        v.Enabled = false
-    elseif v:IsA("MeshPart") then
-        v.Material = Enum.Material.Plastic
-        v.Reflectance = 0
-        v.TextureID = ""
-    end
+    pcall(function()
+        if v:IsA("BasePart") then  -- Bao quát Part, MeshPart, UnionOperation
+            v.Material = Enum.Material.Plastic
+            v.Reflectance = 0
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v.Transparency = 1
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+            v.Enabled = false
+        elseif v:IsA("Explosion") then
+            v.BlastPressure = 1
+            v.BlastRadius = 1
+        elseif v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SpotLight") then
+            v.Enabled = false
+        elseif v:IsA("Sound") then  -- Tắt âm thanh không cần
+            v.Volume = 0
+        end
+    end)
 end
 
--- Áp dụng tối ưu cho workspace
-for _, v in pairs(workspace:GetDescendants()) do
-    optimizePart(v)
-end
-
--- 4. TỐI ƯU NHÂN VẬT NGƯỜI CHƠI
-for _, player in pairs(Players:GetPlayers()) do
-    if player.Character then
-        for _, v in pairs(player.Character:GetDescendants()) do
-            optimizePart(v)
+-- Hàm chính: Áp dụng booster
+local function applyBoost()
+    if isBoosted then return end
+    isBoosted = true
+    
+    -- 1. TẮT HIỆU ỨNG ÁNH SÁNG
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.Brightness = 0
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") then  -- Bao quát Blur, SunRays, etc.
+            effect.Enabled = false
         end
     end
+    
+    -- 2. TỐI ƯU TERRAIN
+    Terrain.WaterWaveSize = 0
+    Terrain.WaterWaveSpeed = 0
+    Terrain.WaterReflectance = 0
+    Terrain.WaterTransparency = 0
+    
+    -- 3. TỐI ƯU WORKSPACE
+    for _, v in pairs(workspace:GetDescendants()) do
+        optimizePart(v)
+    end
+    
+    -- 4. TỐI ƯU NHÂN VẬT
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character then
+            for _, v in pairs(player.Character:GetDescendants()) do
+                optimizePart(v)
+            end
+        end
+    end
+    
+    -- 5. SETTINGS RENDERING (sửa enum chuẩn)
+    settings().Rendering.QualityLevel = CONFIG.TargetQuality
+    settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+    settings().Rendering.EditQualityLevel = CONFIG.TargetQuality
+    GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+    
+    pcall(function()
+        settings().Rendering.EnableFRM = false
+        settings().Rendering.EagerBulkExecution = false
+    end)
+    
+    -- 6. CAMERA & PLAYER TỐI ƯU
+    local camera = workspace.CurrentCamera
+    if camera then
+        camera.FieldOfView = 70
+        camera.MaxAxisRotation = math.rad(80)  -- Giảm rotation để tăng FPS
+    end
+    StarterGui:SetCore("AutoJumpEnabled", false)  -- Tắt auto-jump
+    
+    -- 7. GC ĐỊNH KỲ (cải tiến: dùng collectgarbage)
+    spawn(function()
+        while isBoosted do
+            task.wait(CONFIG.GCInterval)
+            collectgarbage("collect")
+        end
+    end)
+    
+    -- 8. FPS COUNTER (sửa: tính delta time đúng cách)
+    if CONFIG.EnableFPSCounter then
+        local FpsLabel = Instance.new("ScreenGui")
+        FpsLabel.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+        FpsLabel.Name = "FPSCounter"
+        
+        local Label = Instance.new("TextLabel")
+        Label.Parent = FpsLabel
+        Label.Size = UDim2.new(0, 200, 0, 50)
+        Label.Position = UDim2.new(0, 10, 0, 10)
+        Label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        Label.BackgroundTransparency = 0.3
+        Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Label.TextSize = 18
+        Label.Font = Enum.Font.SourceSansBold
+        Label.Text = "FPS: Calculating..."
+        
+        -- Tính FPS mượt (trung bình 10 frames)
+        RunService.Heartbeat:Connect(function()
+            local currentTime = tick()
+            local delta = currentTime - lastTime
+            lastTime = currentTime
+            
+            table.insert(fpsHistory, 1 / delta)
+            if #fpsHistory > 10 then
+                table.remove(fpsHistory)
+            end
+            
+            local avgFps = 0
+            for _, f in ipairs(fpsHistory) do
+                avgFps = avgFps + f
+            end
+            avgFps = avgFps / #fpsHistory
+            
+            Label.Text = "FPS: " .. math.floor(avgFps)
+            
+            -- Màu sắc dựa trên FPS
+            if avgFps > 60 then
+                Label.TextColor3 = Color3.fromRGB(0, 255, 0)  -- Xanh
+            elseif avgFps > 30 then
+                Label.TextColor3 = Color3.fromRGB(255, 255, 0)  -- Vàng
+            else
+                Label.TextColor3 = Color3.fromRGB(255, 0, 0)  -- Đỏ
+            end
+        end)
+    end
+    
+    print("=== FPS Booster đã kích hoạt thành công! ===")
+    print("- Đã tắt shadows, effects & particles")
+    print("- Đã tối ưu terrain & materials")
+    print("- Đã giảm rendering quality xuống " .. tostring(CONFIG.TargetQuality))
+    print("- FPS Counter: Bật (nếu config true)")
 end
 
--- 5. TỐI ƯU CÁC VẬT THỂ MỚI
+-- 9. TỐI ƯU MỚI (với debounce)
 workspace.DescendantAdded:Connect(function(v)
-    wait()
+    if tick() - lastDebounce < CONFIG.DebounceTime then return end
+    lastDebounce = tick()
+    task.wait()  -- Delay nhỏ
     optimizePart(v)
 end)
 
--- 6. TỐI ƯU NHÂN VẬT MỚI
+-- 10. PLAYER MỚI
 Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(function(character)
+        task.wait(1)  -- Delay để character load
         for _, v in pairs(character:GetDescendants()) do
             optimizePart(v)
         end
     end)
 end)
 
--- 7. GIẢM CHẤT LƯỢNG PIXEL VÀ ĐỘ PHÂN GIẢI
-local camera = workspace.CurrentCamera
-if camera then
-    camera.FieldOfView = 70
-end
+-- Áp dụng ngay
+applyBoost()
 
--- Giảm độ phân giải render (Pixelated effect)
-local UserSettings = UserSettings()
-local GameSettings = UserSettings:GetService("UserGameSettings")
-
--- Đặt Graphics Quality xuống mức thấp nhất
-GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-
--- Giảm Render Resolution
-settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-settings().Rendering.EditQualityLevel = Enum.QualityLevel.Level01
-
--- Tắt anti-aliasing và texture quality
-pcall(function()
-    settings().Rendering.EnableFRM = false
-    settings().Rendering.EagerBulkExecution = false
-end)
-
--- 8. GC (Garbage Collection) định kỳ
-spawn(function()
-    while true do
-        wait(60) -- Mỗi 60 giây
-        pcall(function()
-            game:GetService("RunService"):Set3dRenderingEnabled(true)
-        end)
+-- Toggle (gõ "/togglefps" trong chat để bật/tắt - optional)
+Players.LocalPlayer.Chatted:Connect(function(msg)
+    if msg:lower() == "/togglefps" then
+        isBoosted = not isBoosted
+        if isBoosted then
+            applyBoost()
+            print("FPS Booster: BẬT")
+        else
+            print("FPS Booster: TẮT (Reset settings để khôi phục)")
+            -- Reset cơ bản (không full để tránh lag)
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+        end
     end
-end)
-
-print("=== FPS Booster đã kích hoạt thành công! ===")
-print("- Đã tắt shadows và effects")
-print("- Đã tối ưu terrain") 
-print("- Đã giảm chất lượng materials")
-print("- Đã tắt particles và trails")
-print("- Đã giảm độ phân giải pixel xuống mức thấp nhất")
-
--- Hiển thị FPS counter
-local FpsLabel = Instance.new("TextLabel")
-FpsLabel.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-FpsLabel.Size = UDim2.new(0, 200, 0, 50)
-FpsLabel.Position = UDim2.new(0, 10, 0, 10)
-FpsLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-FpsLabel.BackgroundTransparency = 0.5
-FpsLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-FpsLabel.TextSize = 20
-FpsLabel.Font = Enum.Font.SourceSansBold
-FpsLabel.Text = "FPS: Calculating..."
-
-RunService.RenderStepped:Connect(function()
-    local fps = math.floor(1 / RunService.RenderStepped:Wait())
-    FpsLabel.Text = "FPS: " .. tostring(fps)
 end)
