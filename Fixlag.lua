@@ -1,8 +1,8 @@
--- Blox Fruits FPS Booster Script - Phiên bản v2.9 (Xóa Sương Mù, Giảm Đồ Họa, Xóa Effects, Không Hiệu Ứng Động)
--- Tối ưu hóa map/environment, skip tất cả player characters
+-- Blox Fruits FPS Booster Script - Phiên bản v3.0 (Xóa Hiệu Ứng Skill)
+-- Xóa particles, beams, trails, fire/smoke từ skills; giữ skin all players
 
 local success, err = pcall(function()
-    print("=== FPS Booster v2.9 đang khởi động (Xóa Sương Mù & Effects Động) ===")
+    print("=== FPS Booster v3.0 đang khởi động (Xóa Hiệu Ứng Skill) ===")
     
     local Lighting = game:GetService("Lighting")
     print("Loading Lighting... OK")
@@ -32,18 +32,21 @@ local success, err = pcall(function()
     local ContentProvider = game:GetService("ContentProvider")
     print("Loading ContentProvider... OK")
     
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    print("Loading ReplicatedStorage... OK")
+    
     -- Config
     local CONFIG = {
-        TargetQuality = Enum.QualityLevel.Level01,  -- Thấp nhất cho map
+        TargetQuality = Enum.QualityLevel.Level01,
         GCInterval = 30,
-        DebounceTime = 0.2
+        DebounceTime = 0.1  -- Giảm debounce để xóa effects nhanh hơn
     }
     
     -- Biến
     local isBoosted = false
     local lastDebounce = 0
     
-    -- Hàm kiểm tra nếu là player character (để skip)
+    -- Hàm kiểm tra nếu là player character (để skip skin)
     local function isPlayerCharacter(descendant)
         for _, player in pairs(Players:GetPlayers()) do
             if player.Character and descendant:IsDescendantOf(player.Character) then
@@ -53,7 +56,24 @@ local success, err = pcall(function()
         return false
     end
     
-    -- Hàm optimizePart (THÊM: Xóa SurfaceAppearance, Anchored cho map, tắt dynamic attachments)
+    -- Hàm xóa skill effects cụ thể (THÊM: Target Explosion, Sparkles, và destroy nhanh)
+    local function removeSkillEffects(parent)
+        for _, v in pairs(parent:GetDescendants()) do
+            if isPlayerCharacter(v) then continue end  -- Skip skin
+            pcall(function()
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or 
+                   v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("Explosion") then
+                    v:Destroy()  -- Xóa hoàn toàn thay vì disable (nhanh hơn cho skills)
+                elseif v:IsA("PointLight") or v:IsA("SpotLight") then
+                    v.Enabled = false
+                elseif v:IsA("Attachment") and (v.Parent:IsA("ParticleEmitter") or v.Parent:IsA("Trail")) then
+                    v:Destroy()  -- Xóa attachments của effects
+                end
+            end)
+        end
+    end
+    
+    -- Hàm optimizePart (Cập tiến: Tập trung xóa effects, giữ map low-res)
     local function optimizePart(v)
         if isPlayerCharacter(v) then
             return  -- Giữ nguyên skin tất cả players
@@ -61,26 +81,17 @@ local success, err = pcall(function()
         
         local ok, err = pcall(function()
             if v:IsA("BasePart") then
-                v.Material = Enum.Material.Plastic  -- Chỉ cho map parts
+                v.Material = Enum.Material.Plastic  -- Low-res map
                 v.Reflectance = 0
                 v.CastShadow = false
-                v.Anchored = true  -- Tắt di chuyển động cho map objects (không hiệu ứng động)
+                v.Anchored = true  -- Tắt di chuyển động map
                 if v:IsA("MeshPart") and not v.Parent:IsA("Model") then
-                    v.TextureID = ""  -- Low-res cho map meshes
+                    v.TextureID = ""  -- Low-res meshes
                 end
             elseif v:IsA("Decal") or v:IsA("Texture") then
                 v.Transparency = 1
-                v.MipMapDither = Enum.MipMapDither.None  -- Pixelated cho decals map
-            elseif v:IsA("SurfaceAppearance") then  -- THÊM: Xóa surface effects
-                v.Enabled = false
-            elseif v:IsA("Attachment") and v.Parent:IsA("BasePart") then  -- Tắt dynamic attachments
-                v.Parent:FindFirstChildOfClass("Attachment"):Destroy()  -- Xóa nếu là dynamic
-            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
-                v.Enabled = false
-            elseif v:IsA("Explosion") then
-                v.BlastPressure = 1
-                v.BlastRadius = 1
-            elseif v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SpotLight") then
+                v.MipMapDither = Enum.MipMapDither.None
+            elseif v:IsA("SurfaceAppearance") then
                 v.Enabled = false
             end
         end)
@@ -89,38 +100,37 @@ local success, err = pcall(function()
         end
     end
     
-    -- Hàm applyBoost (THÊM: Xóa sương mù hoàn toàn, giảm dynamic lighting, xóa effects)
+    -- Hàm applyBoost (THÊM: Quét ReplicatedStorage cho skill assets, xóa effects ngay)
     local function applyBoost()
-        print("applyBoost: Starting (Xóa Sương Mù & Effects Động)...")
+        print("applyBoost: Starting (Xóa Hiệu Ứng Skill)...")
         if isBoosted then 
             print("applyBoost: Already boosted")
             return 
         end
         isBoosted = true
         
-        -- 1. Lighting (THÊM: Xóa sương mù, luôn ban ngày, tắt dynamic)
+        -- 1. Lighting (giữ xóa sương mù/dynamic)
         print("Optimizing Lighting...")
         local ok1, err1 = pcall(function()
             Lighting.GlobalShadows = false
-            Lighting.FogEnd = 9e9  -- Xóa sương mù (xa vô tận)
-            Lighting.FogStart = 0  -- THÊM: Bắt đầu fog từ 0, xóa hoàn toàn
+            Lighting.FogEnd = 9e9
+            Lighting.FogStart = 0
             Lighting.Brightness = 0
-            Lighting.ClockTime = 12  -- THÊM: Luôn ban ngày (không dynamic time)
-            Lighting.GeographicLatitude = 0  -- THÊM: Tắt latitude cho no dynamic sun
-            Lighting.OutdoorAmbient = Color3.fromRGB(100, 100, 100)  -- THÊM: Giảm ambient light
-            Lighting.Technology = Enum.Technology.Compatibility  -- Mode cũ, ít tính toán
-            Lighting.AmbientOcclusion = Enum.EnviromentalSpecularScale.Disabled  -- Tắt AO
+            Lighting.ClockTime = 12
+            Lighting.GeographicLatitude = 0
+            Lighting.OutdoorAmbient = Color3.fromRGB(100, 100, 100)
+            Lighting.Technology = Enum.Technology.Compatibility
+            Lighting.AmbientOcclusion = Enum.EnviromentalSpecularScale.Disabled
             for _, effect in pairs(Lighting:GetChildren()) do
                 if effect:IsA("PostEffect") then
-                    effect.Enabled = false  -- Xóa tất cả effects (blur, bloom, etc.)
+                    effect:Destroy()  -- Xóa effects thay vì disable
                 end
             end
         end)
-        if ok1 then print("Lighting... OK (No Fog, No Dynamic Effects)") else print("ERROR Lighting: " .. tostring(err1)) end
+        if ok1 then print("Lighting... OK") else print("ERROR Lighting: " .. tostring(err1)) end
         
         -- 2. Terrain
         if Terrain then
-            print("Optimizing Terrain...")
             local ok2, err2 = pcall(function()
                 Terrain.WaterWaveSize = 0
                 Terrain.WaterWaveSpeed = 0
@@ -130,19 +140,31 @@ local success, err = pcall(function()
             if ok2 then print("Terrain... OK") else print("ERROR Terrain: " .. tostring(err2)) end
         end
         
-        -- 3. Workspace
+        -- 3. Workspace (Optimize map + xóa skill effects)
         print("Optimizing Workspace...")
         local ok3, err3 = pcall(function()
             for _, v in pairs(workspace:GetDescendants()) do
                 optimizePart(v)
             end
+            removeSkillEffects(workspace)  -- Xóa effects skills trong workspace
         end)
-        if ok3 then print("Workspace... OK (No Dynamic Motion)") else print("ERROR Workspace: " .. tostring(err3)) end
+        if ok3 then print("Workspace... OK (Xóa Skill Effects)") else print("ERROR Workspace: " .. tostring(err3)) end
         
-        -- 4. Skip Players (giữ skin all)
-        print("Players: Skip optimize (Giữ skin tất cả)... OK")
+        -- 4. ReplicatedStorage (THÊM: Xóa skill assets/effects từ RS)
+        print("Cleaning ReplicatedStorage...")
+        local ok_rs, err_rs = pcall(function()
+            removeSkillEffects(ReplicatedStorage)
+        end)
+        if ok_rs then print("ReplicatedStorage... OK") else print("ERROR RS: " .. tostring(err_rs)) end
         
-        -- 5. Rendering Settings (THÊM: Giảm stream quality cho no dynamic load)
+        -- 5. StarterPack (THÊM: Xóa effects từ tools/skills)
+        print("Cleaning StarterPack...")
+        local ok_sp, err_sp = pcall(function()
+            removeSkillEffects(game.StarterPack)
+        end)
+        if ok_sp then print("StarterPack... OK") else print("ERROR StarterPack: " .. tostring(err_sp)) end
+        
+        -- 6. Rendering Settings
         print("Optimizing Rendering...")
         local ok5, err5 = pcall(function()
             settings().Rendering.QualityLevel = CONFIG.TargetQuality
@@ -151,92 +173,81 @@ local success, err = pcall(function()
             GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
             settings().Rendering.EnableFRM = false
             settings().Rendering.EagerBulkExecution = false
-            ContentProvider.RequestQueueSize = 0  -- Giảm preload map assets
-            settings().Rendering.MeshContentProvider.MaximumConcurrentRequests = 1  -- Giảm mesh map
-            settings().StreamingTargetFPS = 30  -- THÊM: Giới hạn FPS target thấp để no dynamic high-res
+            ContentProvider.RequestQueueSize = 0
+            settings().Rendering.MeshContentProvider.MaximumConcurrentRequests = 1
+            settings().StreamingTargetFPS = 30  -- Giới hạn FPS để no lag effects
         end)
-        if ok5 then print("Rendering... OK (No Dynamic Load)") else print("ERROR Rendering: " .. tostring(err5)) end
+        if ok5 then print("Rendering... OK") else print("ERROR Rendering: " .. tostring(err5)) end
         
-        -- 6. Camera & StarterGui
-        print("Optimizing Camera...")
+        -- 7. Camera & StarterGui
         local camera = workspace.CurrentCamera
         if camera then
-            local ok6, err6 = pcall(function()
+            pcall(function()
                 camera.FieldOfView = 70
             end)
-            if ok6 then print("Camera... OK") else print("ERROR Camera: " .. tostring(err6)) end
+            print("Camera... OK")
         end
-        
-        local ok7, err7 = pcall(function()
+        pcall(function()
             StarterGui:SetCore("AutoJumpEnabled", false)
         end)
-        if ok7 then print("AutoJump... OK") else print("ERROR AutoJump: " .. tostring(err7)) end
+        print("AutoJump... OK")
         
-        -- 7. GC Loop
-        print("Starting GC...")
-        local ok8, err8 = pcall(function()
-            spawn(function()
-                while isBoosted do
-                    task.wait(CONFIG.GCInterval)
-                    collectgarbage("collect")
-                end
-            end)
+        -- 8. GC Loop
+        spawn(function()
+            while isBoosted do
+                task.wait(CONFIG.GCInterval)
+                collectgarbage("collect")
+            end
         end)
-        if ok8 then print("GC... OK") else print("ERROR GC: " .. tostring(err8)) end
+        print("GC... OK")
         
-        print("applyBoost: Completed! (Không sương mù, không effects động)")
+        print("applyBoost: Completed! (Hiệu ứng skill đã xóa)")
     end
     
-    -- Connections
+    -- Connections (THÊM: Quét effects mới từ skills liên tục)
     print("Setting up Connections...")
-    local ok_conn1, err_conn1 = pcall(function()
-        workspace.DescendantAdded:Connect(function(v)
-            if isPlayerCharacter(v) then return end  -- Skip tất cả players
-            if tick() - lastDebounce < CONFIG.DebounceTime then return end
-            lastDebounce = tick()
-            task.wait()
-            optimizePart(v)
-        end)
+    workspace.DescendantAdded:Connect(function(v)
+        if isPlayerCharacter(v) then return end
+        if tick() - lastDebounce < CONFIG.DebounceTime then return end
+        lastDebounce = tick()
+        task.wait()
+        optimizePart(v)
+        removeSkillEffects(v.Parent)  -- Xóa effects mới spawn từ skill
     end)
-    if ok_conn1 then print("DescendantAdded... OK (No Dynamic Effects)") else print("ERROR DescendantAdded: " .. tostring(err_conn1)) end
+    print("DescendantAdded... OK (Auto Xóa Skill Effects)")
     
-    local ok_conn2, err_conn2 = pcall(function()
-        Players.PlayerAdded:Connect(function(player)
-            player.CharacterAdded:Connect(function(character)
-                task.wait(1)
-                -- KHÔNG optimize character nào cả
-                print("New player " .. player.Name .. " - Skin giữ nguyên")
-            end)
+    Players.PlayerAdded:Connect(function(player)
+        player.CharacterAdded:Connect(function(character)
+            task.wait(1)
+            print("New player " .. player.Name .. " - Skin giữ nguyên, effects xóa")
         end)
     end)
-    if ok_conn2 then print("PlayerAdded... OK (No Optimize)") else print("ERROR PlayerAdded: " .. tostring(err_conn2)) end
+    print("PlayerAdded... OK")
     
     -- Áp dụng
     applyBoost()
     
     -- Toggle
-    local ok_toggle, err_toggle = pcall(function()
-        LocalPlayer.Chatted:Connect(function(msg)
-            if msg:lower() == "/togglefps" then
-                isBoosted = not isBoosted
-                if isBoosted then
-                    applyBoost()
-                    print("FPS Booster: BẬT (Không Effects Động)")
-                else
-                    print("FPS Booster: TẮT")
-                    settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-                    Lighting.Technology = Enum.Technology.Future  -- Reset lighting
-                    Lighting.FogEnd = 100000  -- Reset fog
-                    Lighting.ClockTime = 14  -- Reset time
-                end
+    LocalPlayer.Chatted:Connect(function(msg)
+        if msg:lower() == "/togglefps" then
+            isBoosted = not isBoosted
+            if isBoosted then
+                applyBoost()
+                print("FPS Booster: BẬT (Xóa Skill Effects)")
+            else
+                print("FPS Booster: TẮT")
+                settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+                Lighting.Technology = Enum.Technology.Future
+                Lighting.FogEnd = 100000
+                Lighting.ClockTime = 14
             end
-        end)
+        end
     end)
-    if ok_toggle then print("Toggle... OK") else print("ERROR Toggle: " .. tostring(err_toggle)) end
+    print("Toggle... OK")
     
-    print("=== FPS Booster v2.9 OK - Không sương mù/effects động! ===")
+    print("=== FPS Booster v3.0 OK - Hiệu ứng skill đã xóa! ===")
 end)
 
 if not success then
-    print("CRITICAL ERROR v2.9: " .. tostring(err))
+    print("CRITICAL ERROR v3.0: " .. tostring(err))
 end
