@@ -1,6 +1,6 @@
--- Blox Fruits FPS Booster Script - Phiên bản Cải tiến v2.0
+-- Blox Fruits FPS Booster Script - Phiên bản Sửa Lỗi v2.1
 -- Tối ưu hóa đồ họa để tăng FPS (Hỗ trợ mobile/low-end PC)
--- Tác giả: Cải tiến từ script gốc
+-- Tác giả: Cải tiến từ script gốc, sửa lỗi Camera
 
 local Lighting = game:GetService("Lighting")
 local Terrain = workspace.Terrain
@@ -15,7 +15,7 @@ local CONFIG = {
     EnableFPSCounter = true,  -- Bật/tắt FPS UI
     TargetQuality = Enum.QualityLevel.Level01,  -- Mức chất lượng (Level01 thấp nhất)
     GCInterval = 30,  -- Giây giữa các lần GC
-    DebounceTime = 0.1  -- Delay cho DescendantAdded để tránh spam
+    DebounceTime = 0.2  -- Delay cho DescendantAdded để tránh spam (tăng từ 0.1)
 }
 
 -- Biến toàn cục
@@ -25,9 +25,9 @@ local lastTime = tick()
 local fpsHistory = {}  -- Để tính FPS trung bình mượt hơn
 
 -- Thông báo bắt đầu
-print("=== FPS Booster v2.0 đang khởi động ===")
+print("=== FPS Booster v2.1 đang khởi động (Sửa lỗi Camera) ===")
 
--- Hàm tối ưu Part (cải tiến: loại bỏ trùng lặp, thêm pcall)
+-- Hàm tối ưu Part (giữ nguyên, đã tốt)
 local function optimizePart(v)
     pcall(function()
         if v:IsA("BasePart") then  -- Bao quát Part, MeshPart, UnionOperation
@@ -49,7 +49,7 @@ local function optimizePart(v)
     end)
 end
 
--- Hàm chính: Áp dụng booster
+-- Hàm chính: Áp dụng booster (sửa lỗi camera)
 local function applyBoost()
     if isBoosted then return end
     isBoosted = true
@@ -84,7 +84,7 @@ local function applyBoost()
         end
     end
     
-    -- 5. SETTINGS RENDERING (sửa enum chuẩn)
+    -- 5. SETTINGS RENDERING
     settings().Rendering.QualityLevel = CONFIG.TargetQuality
     settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
     settings().Rendering.EditQualityLevel = CONFIG.TargetQuality
@@ -95,15 +95,18 @@ local function applyBoost()
         settings().Rendering.EagerBulkExecution = false
     end)
     
-    -- 6. CAMERA & PLAYER TỐI ƯU
+    -- 6. CAMERA & PLAYER TỐI ƯU (SỬA LỖI: Loại bỏ MaxAxisRotation, thêm pcall)
     local camera = workspace.CurrentCamera
     if camera then
-        camera.FieldOfView = 70
-        camera.MaxAxisRotation = math.rad(80)  -- Giảm rotation để tăng FPS
+        pcall(function()
+            camera.FieldOfView = 70  -- Hợp lệ, giảm FOV để tăng FPS nhẹ
+        end)
     end
-    StarterGui:SetCore("AutoJumpEnabled", false)  -- Tắt auto-jump
+    pcall(function()
+        StarterGui:SetCore("AutoJumpEnabled", false)  -- Tắt auto-jump
+    end)
     
-    -- 7. GC ĐỊNH KỲ (cải tiến: dùng collectgarbage)
+    -- 7. GC ĐỊNH KỲ
     spawn(function()
         while isBoosted do
             task.wait(CONFIG.GCInterval)
@@ -111,11 +114,12 @@ local function applyBoost()
         end
     end)
     
-    -- 8. FPS COUNTER (sửa: tính delta time đúng cách)
+    -- 8. FPS COUNTER (cải tiến: dùng Heartbeat ổn định hơn)
     if CONFIG.EnableFPSCounter then
         local FpsLabel = Instance.new("ScreenGui")
         FpsLabel.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
         FpsLabel.Name = "FPSCounter"
+        FpsLabel.ResetOnSpawn = false  -- Không reset khi respawn
         
         local Label = Instance.new("TextLabel")
         Label.Parent = FpsLabel
@@ -128,37 +132,39 @@ local function applyBoost()
         Label.Font = Enum.Font.SourceSansBold
         Label.Text = "FPS: Calculating..."
         
-        -- Tính FPS mượt (trung bình 10 frames)
+        -- Tính FPS mượt (trung bình 10 frames, dùng Heartbeat)
         RunService.Heartbeat:Connect(function()
             local currentTime = tick()
             local delta = currentTime - lastTime
-            lastTime = currentTime
-            
-            table.insert(fpsHistory, 1 / delta)
-            if #fpsHistory > 10 then
-                table.remove(fpsHistory)
-            end
-            
-            local avgFps = 0
-            for _, f in ipairs(fpsHistory) do
-                avgFps = avgFps + f
-            end
-            avgFps = avgFps / #fpsHistory
-            
-            Label.Text = "FPS: " .. math.floor(avgFps)
-            
-            -- Màu sắc dựa trên FPS
-            if avgFps > 60 then
-                Label.TextColor3 = Color3.fromRGB(0, 255, 0)  -- Xanh
-            elseif avgFps > 30 then
-                Label.TextColor3 = Color3.fromRGB(255, 255, 0)  -- Vàng
-            else
-                Label.TextColor3 = Color3.fromRGB(255, 0, 0)  -- Đỏ
+            if delta > 0 then  -- Tránh chia 0
+                lastTime = currentTime
+                
+                table.insert(fpsHistory, 1 / delta)
+                if #fpsHistory > 10 then
+                    table.remove(fpsHistory)
+                end
+                
+                local avgFps = 0
+                for _, f in ipairs(fpsHistory) do
+                    avgFps = avgFps + f
+                end
+                avgFps = avgFps / math.max(1, #fpsHistory)  -- Tránh chia 0
+                
+                Label.Text = "FPS: " .. math.floor(avgFps)
+                
+                -- Màu sắc dựa trên FPS
+                if avgFps > 60 then
+                    Label.TextColor3 = Color3.fromRGB(0, 255, 0)  -- Xanh
+                elseif avgFps > 30 then
+                    Label.TextColor3 = Color3.fromRGB(255, 255, 0)  -- Vàng
+                else
+                    Label.TextColor3 = Color3.fromRGB(255, 0, 0)  -- Đỏ
+                end
             end
         end)
     end
     
-    print("=== FPS Booster đã kích hoạt thành công! ===")
+    print("=== FPS Booster v2.1 đã kích hoạt thành công! (Không còn lỗi Camera) ===")
     print("- Đã tắt shadows, effects & particles")
     print("- Đã tối ưu terrain & materials")
     print("- Đã giảm rendering quality xuống " .. tostring(CONFIG.TargetQuality))
@@ -186,7 +192,7 @@ end)
 -- Áp dụng ngay
 applyBoost()
 
--- Toggle (gõ "/togglefps" trong chat để bật/tắt - optional)
+-- Toggle (gõ "/togglefps" trong chat để bật/tắt)
 Players.LocalPlayer.Chatted:Connect(function(msg)
     if msg:lower() == "/togglefps" then
         isBoosted = not isBoosted
@@ -195,8 +201,11 @@ Players.LocalPlayer.Chatted:Connect(function(msg)
             print("FPS Booster: BẬT")
         else
             print("FPS Booster: TẮT (Reset settings để khôi phục)")
-            -- Reset cơ bản (không full để tránh lag)
+            -- Reset cơ bản
             settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+            if Players.LocalPlayer.PlayerGui:FindFirstChild("FPSCounter") then
+                Players.LocalPlayer.PlayerGui.FPSCounter:Destroy()
+            end
         end
     end
 end)
