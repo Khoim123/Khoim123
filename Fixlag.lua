@@ -1,17 +1,15 @@
--- Blox Fruits FPS Booster Script - Phiên bản v2.4 (Fix Âm Thanh - Không Tắt Sound)
--- Tối ưu hóa đồ họa để tăng FPS (với DEBUG prints để check lỗi)
--- Đã xóa phần tắt âm thanh để fix lỗi mute
+-- Blox Fruits FPS Booster Script - Phiên bản v2.5 (Giảm Pixel & Chất Lượng Tối Giản)
+-- Tối ưu hóa đồ họa đến mức thấp nhất (pixelated, low-res textures)
 
 local success, err = pcall(function()
-    -- Load Services với debug
-    print("=== FPS Booster v2.4 đang khởi động (Fix Âm Thanh) ===")
+    print("=== FPS Booster v2.5 đang khởi động (Tối Giản Graphics) ===")
     
     local Lighting = game:GetService("Lighting")
     print("Loading Lighting... OK")
     
     local Terrain = workspace:FindFirstChild("Terrain")
     if not Terrain then
-        print("WARNING: No Terrain in workspace, skipping terrain optim")
+        print("WARNING: No Terrain, skipping")
         Terrain = nil
     else
         print("Loading Terrain... OK")
@@ -24,17 +22,18 @@ local success, err = pcall(function()
     print("Loading RunService... OK")
     
     local UserSettings = UserSettings()
-    print("Loading UserSettings... OK")
-    
     local GameSettings = UserSettings:GetService("UserGameSettings")
-    print("Loading GameSettings... OK")
+    print("Loading Settings... OK")
     
     local StarterGui = game:GetService("StarterGui")
     print("Loading StarterGui... OK")
     
+    local ContentProvider = game:GetService("ContentProvider")
+    print("Loading ContentProvider... OK")
+    
     -- Config
     local CONFIG = {
-        TargetQuality = Enum.QualityLevel.Level01,
+        TargetQuality = Enum.QualityLevel.Level01,  -- Thấp nhất
         GCInterval = 30,
         DebounceTime = 0.2
     }
@@ -43,15 +42,20 @@ local success, err = pcall(function()
     local isBoosted = false
     local lastDebounce = 0
     
-    -- Hàm optimizePart (XÓA PHẦN SOUND để fix âm thanh)
+    -- Hàm optimizePart (THÊM: Tắt CanCollide, MipMapDither, TextureID rỗng)
     local function optimizePart(v)
         local ok, err = pcall(function()
             if v:IsA("BasePart") then
                 v.Material = Enum.Material.Plastic
                 v.Reflectance = 0
                 v.CastShadow = false
+                v.CanCollide = false  -- Tắt collision để giảm physics CPU
+                if v:IsA("MeshPart") then
+                    v.TextureID = ""  -- Xóa texture để low-res
+                end
             elseif v:IsA("Decal") or v:IsA("Texture") then
                 v.Transparency = 1
+                v.MipMapDither = Enum.MipMapDither.None  -- Tắt mipmaps (pixelated effect)
             elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
                 v.Enabled = false
             elseif v:IsA("Explosion") then
@@ -59,7 +63,6 @@ local success, err = pcall(function()
                 v.BlastRadius = 1
             elseif v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SpotLight") then
                 v.Enabled = false
-            -- ĐÃ XÓA: elseif v:IsA("Sound") then v.Volume = 0 end  (Fix âm thanh)
             end
         end)
         if not ok then
@@ -67,30 +70,32 @@ local success, err = pcall(function()
         end
     end
     
-    -- Hàm applyBoost (giữ nguyên)
+    -- Hàm applyBoost (THÊM: Compatibility Lighting, RenderStepped thấp, Preload giảm)
     local function applyBoost()
-        print("applyBoost: Starting...")
+        print("applyBoost: Starting (Ultra Low Graphics)...")
         if isBoosted then 
-            print("applyBoost: Already boosted, skipping")
+            print("applyBoost: Already boosted")
             return 
         end
         isBoosted = true
         
-        -- 1. Lighting
+        -- 1. Lighting (THÊM: Compatibility mode cho low-tech)
         print("Optimizing Lighting...")
         local ok1, err1 = pcall(function()
             Lighting.GlobalShadows = false
             Lighting.FogEnd = 9e9
             Lighting.Brightness = 0
+            Lighting.Technology = Enum.Technology.Compatibility  -- Mode cũ, ít tính toán (tối giản hơn)
+            Lighting.AmbientOcclusion = Enum.EnviromentalSpecularScale.Disabled  -- Tắt AO nếu có
             for _, effect in pairs(Lighting:GetChildren()) do
                 if effect:IsA("PostEffect") then
                     effect.Enabled = false
                 end
             end
         end)
-        if ok1 then print("Lighting... OK") else print("ERROR Lighting: " .. tostring(err1)) end
+        if ok1 then print("Lighting... OK (Compatibility Mode)") else print("ERROR Lighting: " .. tostring(err1)) end
         
-        -- 2. Terrain (nếu có)
+        -- 2. Terrain
         if Terrain then
             print("Optimizing Terrain...")
             local ok2, err2 = pcall(function()
@@ -102,14 +107,14 @@ local success, err = pcall(function()
             if ok2 then print("Terrain... OK") else print("ERROR Terrain: " .. tostring(err2)) end
         end
         
-        -- 3. Workspace
+        -- 3. Workspace (THÊM: Áp dụng optimize cho tất cả)
         print("Optimizing Workspace...")
         local ok3, err3 = pcall(function()
             for _, v in pairs(workspace:GetDescendants()) do
                 optimizePart(v)
             end
         end)
-        if ok3 then print("Workspace... OK") else print("ERROR Workspace: " .. tostring(err3)) end
+        if ok3 then print("Workspace... OK (Pixelated Textures)") else print("ERROR Workspace: " .. tostring(err3)) end
         
         -- 4. Players
         print("Optimizing Players...")
@@ -124,8 +129,8 @@ local success, err = pcall(function()
         end)
         if ok4 then print("Players... OK") else print("ERROR Players: " .. tostring(err4)) end
         
-        -- 5. Rendering Settings
-        print("Optimizing Rendering...")
+        -- 5. Rendering Settings (THÊM: Giảm preload & concurrent requests)
+        print("Optimizing Rendering (Ultra Low)...")
         local ok5, err5 = pcall(function()
             settings().Rendering.QualityLevel = CONFIG.TargetQuality
             settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
@@ -133,8 +138,10 @@ local success, err = pcall(function()
             GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
             settings().Rendering.EnableFRM = false
             settings().Rendering.EagerBulkExecution = false
+            ContentProvider.RequestQueueSize = 0  -- Giảm preload assets (low-res load)
+            settings().Rendering.MeshContentProvider.MaximumConcurrentRequests = 1  -- Giảm mesh detail
         end)
-        if ok5 then print("Rendering... OK") else print("ERROR Rendering: " .. tostring(err5)) end
+        if ok5 then print("Rendering... OK (Max Low-Res)") else print("ERROR Rendering: " .. tostring(err5)) end
         
         -- 6. Camera & StarterGui
         print("Optimizing Camera...")
@@ -143,9 +150,7 @@ local success, err = pcall(function()
             local ok6, err6 = pcall(function()
                 camera.FieldOfView = 70
             end)
-            if ok6 then print("Camera FOV... OK") else print("ERROR Camera: " .. tostring(err6)) end
-        else
-            print("WARNING: No CurrentCamera, skipping")
+            if ok6 then print("Camera... OK") else print("ERROR Camera: " .. tostring(err6)) end
         end
         
         local ok7, err7 = pcall(function()
@@ -154,7 +159,7 @@ local success, err = pcall(function()
         if ok7 then print("AutoJump... OK") else print("ERROR AutoJump: " .. tostring(err7)) end
         
         -- 7. GC Loop
-        print("Starting GC Loop...")
+        print("Starting GC...")
         local ok8, err8 = pcall(function()
             spawn(function()
                 while isBoosted do
@@ -163,9 +168,9 @@ local success, err = pcall(function()
                 end
             end)
         end)
-        if ok8 then print("GC Loop... OK") else print("ERROR GC: " .. tostring(err8)) end
+        if ok8 then print("GC... OK") else print("ERROR GC: " .. tostring(err8)) end
         
-        print("applyBoost: Completed successfully! (Âm thanh đã được giữ nguyên)")
+        print("applyBoost: Completed! (Graphics giờ siêu thấp - pixelated)")
     end
     
     -- Connections
@@ -202,21 +207,20 @@ local success, err = pcall(function()
                 isBoosted = not isBoosted
                 if isBoosted then
                     applyBoost()
-                    print("FPS Booster: BẬT")
+                    print("FPS Booster: BẬT (Ultra Low)")
                 else
                     print("FPS Booster: TẮT")
                     settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+                    Lighting.Technology = Enum.Technology.Future  -- Reset lighting
                 end
             end
         end)
     end)
-    if ok_toggle then print("Toggle Chat... OK") else print("ERROR Toggle: " .. tostring(err_toggle)) end
+    if ok_toggle then print("Toggle... OK") else print("ERROR Toggle: " .. tostring(err_toggle)) end
     
-    print("=== FPS Booster v2.4 OK - All setups done! (Âm thanh OK) ===")
+    print("=== FPS Booster v2.5 OK - Graphics siêu tối giản! ===")
 end)
 
--- Global error catcher
 if not success then
-    print("CRITICAL ERROR in FPS Booster v2.4: " .. tostring(err))
-    print("Stack trace: " .. debug.traceback())
+    print("CRITICAL ERROR v2.5: " .. tostring(err))
 end
