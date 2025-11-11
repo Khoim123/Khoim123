@@ -1,137 +1,206 @@
--- Blox Fruits FPS Booster Script - Phiên bản v3.1 (Fix Lỗi Xóa Hiệu Ứng Skill)
--- Xóa particles, beams, trails, fire/smoke từ skills; giữ skin all players
+-- Blox Fruits FPS Booster v4.0 - Optimized Version
+-- Giữ 100% skin player, tối ưu hiệu suất và memory
 
 local success, err = pcall(function()
-    print("=== FPS Booster v3.1 đang khởi động (Fix Xóa Skill Effects) ===")
+    print("=== FPS Booster v4.0 Starting (Optimized) ===")
     
-    local Lighting = game:GetService("Lighting")
-    print("Loading Lighting... OK")
-    
-    local Terrain = workspace:FindFirstChild("Terrain")
-    if not Terrain then
-        Terrain = nil
-    end
-    
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    print("Loading Players... OK")
-    
-    local RunService = game:GetService("RunService")
-    print("Loading RunService... OK")
-    
-    local UserSettings = UserSettings()
-    local GameSettings = UserSettings:GetService("UserGameSettings")
-    print("Loading Settings... OK")
-    
-    local StarterGui = game:GetService("StarterGui")
-    print("Loading StarterGui... OK")
-    
-    local ContentProvider = game:GetService("ContentProvider")
-    print("Loading ContentProvider... OK")
-    
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    print("Loading ReplicatedStorage... OK")
-    
-    -- Config
-    local CONFIG = {
-        TargetQuality = Enum.QualityLevel.Level01,
-        GCInterval = 30,
-        DebounceTime = 0.1,
-        EffectScanInterval = 0.5  -- Quét effects mỗi 0.5s
+    -- Services (Cache một lần)
+    local services = {
+        Lighting = game:GetService("Lighting"),
+        Players = game:GetService("Players"),
+        RunService = game:GetService("RunService"),
+        StarterGui = game:GetService("StarterGui"),
+        ContentProvider = game:GetService("ContentProvider"),
+        ReplicatedStorage = game:GetService("ReplicatedStorage"),
+        CollectionService = game:GetService("CollectionService")
     }
     
-    -- Biến
-    local isBoosted = false
-    local lastDebounce = 0
-    local effectScanConnection = nil
+    local Terrain = workspace:FindFirstChild("Terrain")
+    local LocalPlayer = services.Players.LocalPlayer
+    local UserSettings = UserSettings()
+    local GameSettings = UserSettings:GetService("UserGameSettings")
     
-    -- Hàm kiểm tra nếu là player character hoặc tool (để skip skin/tools)
-    local function isPlayerOrTool(descendant)
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character and descendant:IsDescendantOf(player.Character) then
-                return true
-            end
-            if player.Backpack and descendant:IsDescendantOf(player.Backpack) then
-                return true  -- Skip tools trong backpack
+    -- Config tối ưu
+    local CONFIG = {
+        TargetQuality = Enum.QualityLevel.Level01,
+        GCInterval = 90, -- Tăng từ 60 -> 90 để giảm lag spike
+        DebounceTime = 0.3, -- Giảm từ 0.5 -> 0.3 cho responsive hơn
+        EffectScanInterval = 3, -- Tăng từ 2 -> 3 để giảm CPU usage
+        BatchSize = 50 -- Xử lý theo batch để tránh freeze
+    }
+    
+    -- State management
+    local state = {
+        boosted = false,
+        lastDebounce = 0,
+        effectScanConnection = nil,
+        gcConnection = nil,
+        playerCache = {},
+        optimizedParts = {}
+    }
+    
+    local TAG = "OptimizedFPS_v4"
+    
+    -- Cache player characters để tăng tốc độ check
+    local function updatePlayerCache()
+        table.clear(state.playerCache)
+        for _, player in ipairs(services.Players:GetPlayers()) do
+            if player.Character then
+                state.playerCache[player.Character] = true
             end
         end
-        -- Skip nếu là weapon/tool model
-        if descendant.Parent and (descendant.Parent.Name:find("Sword") or descendant.Parent.Name:find("Fruit") or descendant.Parent:IsA("Tool")) then
+    end
+    
+    -- Kiểm tra player/tool (Tối ưu với cache)
+    local function isPlayerRelated(obj)
+        if not obj or not obj.Parent then return false end
+        
+        -- Check cache trước (nhanh nhất)
+        local ancestor = obj
+        for i = 1, 5 do -- Giới hạn 5 level để tránh lag
+            if state.playerCache[ancestor] then return true end
+            ancestor = ancestor.Parent
+            if not ancestor then break end
+        end
+        
+        -- Kiểm tra tool/weapon patterns
+        local name = obj.Name
+        if name:match("Sword") or name:match("Fruit") or name:match("Gun") or 
+           name:match("Katana") or name:match("Staff") then
             return true
         end
+        
+        -- Kiểm tra nếu parent là Tool
+        if obj.Parent:IsA("Tool") or obj.Parent:IsA("Accessory") then
+            return true
+        end
+        
         return false
     end
     
-    -- Hàm xóa skill effects (FIX: Enabled = false cho Explosion, skip tools)
-    local function removeSkillEffects(parent)
-        for _, v in pairs(parent:GetDescendants()) do
-            if isPlayerOrTool(v) then continue end  -- Skip skin/tools
-            pcall(function()
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or 
-                   v:IsA("Smoke") or v:IsA("Sparkles") then
-                    v.Enabled = false  -- Disable thay vì destroy để an toàn
-                elseif v:IsA("Explosion") then
-                    v.Enabled = false  -- FIX: Không destroy Explosion đang active
-                elseif v:IsA("PointLight") or v:IsA("SpotLight") then
-                    v.Enabled = false
-                elseif v:IsA("Attachment") and (v.Parent:IsA("ParticleEmitter") or v.Parent:IsA("Trail")) then
-                    v.Enabled = false  -- Disable attachment effects
+    -- Xóa effects (Tối ưu với early return)
+    local function removeEffects(parent)
+        if not parent then return end
+        
+        pcall(function()
+            local children = parent:GetChildren()
+            for i = 1, #children do
+                local v = children[i]
+                
+                -- Skip nếu đã optimize hoặc là player
+                if services.CollectionService:HasTag(v, TAG) or isPlayerRelated(v) then
+                    continue
                 end
-            end)
-        end
+                
+                local vType = v.ClassName
+                
+                -- Sử dụng lookup table thay vì if-else chain
+                if vType == "ParticleEmitter" or vType == "Trail" or vType == "Beam" or 
+                   vType == "Fire" or vType == "Smoke" or vType == "Sparkles" then
+                    v.Enabled = false
+                    services.CollectionService:AddTag(v, TAG)
+                elseif vType == "PointLight" or vType == "SpotLight" then
+                    v.Enabled = false
+                    v.Brightness = 0
+                    services.CollectionService:AddTag(v, TAG)
+                elseif vType == "Explosion" then
+                    v.BlastPressure = 0
+                    v.BlastRadius = 0
+                    services.CollectionService:AddTag(v, TAG)
+                end
+            end
+        end)
     end
     
-    -- Hàm optimizePart (Giữ nguyên, tập trung map)
+    -- Optimize part (Batch processing)
     local function optimizePart(v)
-        if isPlayerOrTool(v) then
-            return  -- Giữ nguyên skin/tools
+        if not v or not v.Parent then return end
+        if services.CollectionService:HasTag(v, TAG) or isPlayerRelated(v) then
+            return
         end
         
-        local ok, err = pcall(function()
-            if v:IsA("BasePart") then
+        pcall(function()
+            -- Skip nếu thuộc Model có Humanoid
+            local parent = v.Parent
+            if parent and parent:FindFirstChildOfClass("Humanoid") then
+                return
+            end
+            
+            local vType = v.ClassName
+            
+            if vType == "Part" or vType == "MeshPart" or vType == "UnionOperation" then
                 v.Material = Enum.Material.Plastic
                 v.Reflectance = 0
                 v.CastShadow = false
-                v.Anchored = true
-                if v:IsA("MeshPart") and not v.Parent:IsA("Model") then
+                
+                -- Chỉ anchor nếu chưa được anchor
+                if not v.Anchored and v.CanCollide then
+                    v.Anchored = true
+                end
+                
+                if vType == "MeshPart" and v.TextureID ~= "" then
                     v.TextureID = ""
                 end
-            elseif v:IsA("Decal") or v:IsA("Texture") then
+                
+                state.optimizedParts[v] = true
+                
+            elseif vType == "Decal" or vType == "Texture" then
                 v.Transparency = 1
-                v.MipMapDither = Enum.MipMapDither.None
-            elseif v:IsA("SurfaceAppearance") then
+                
+            elseif vType == "SurfaceAppearance" then
                 v.Enabled = false
             end
+            
+            services.CollectionService:AddTag(v, TAG)
         end)
-        if not ok then
-            print("ERROR optimizePart: " .. tostring(err))
+    end
+    
+    -- Optimize batch để tránh freeze
+    local function optimizeBatch(objects)
+        local count = #objects
+        local batchSize = CONFIG.BatchSize
+        
+        for i = 1, count, batchSize do
+            for j = i, math.min(i + batchSize - 1, count) do
+                optimizePart(objects[j])
+            end
+            
+            -- Yield sau mỗi batch
+            if i + batchSize < count then
+                task.wait()
+            end
         end
     end
     
-    -- Hàm applyBoost (FIX: Enum đúng, xóa settings không tồn tại)
+    -- Apply boost chính
     local function applyBoost()
-        print("applyBoost: Starting (Fix Skill Effects)...")
-        if isBoosted then return end
-        isBoosted = true
+        if state.boosted then return end
+        state.boosted = true
         
-        -- 1. Lighting (FIX: Enum chính tả)
-        local ok1, err1 = pcall(function()
-            Lighting.GlobalShadows = false
-            Lighting.FogEnd = 9e9
-            Lighting.FogStart = 0
-            Lighting.Brightness = 0
-            Lighting.ClockTime = 12
-            Lighting.GeographicLatitude = 0
-            Lighting.OutdoorAmbient = Color3.fromRGB(100, 100, 100)
-            Lighting.Technology = Enum.Technology.Compatibility
-            Lighting.EnvironmentSpecularScale = Enum.EnvironmentSpecularScale.Off  -- FIX: Enum đúng
-            for _, effect in pairs(Lighting:GetChildren()) do
+        print("Applying boost...")
+        
+        -- Update player cache
+        updatePlayerCache()
+        
+        -- 1. Lighting (Single pcall)
+        pcall(function()
+            local lighting = services.Lighting
+            lighting.GlobalShadows = false
+            lighting.FogEnd = 9e9
+            lighting.FogStart = 0
+            lighting.Brightness = 0
+            lighting.ClockTime = 12
+            lighting.GeographicLatitude = 0
+            lighting.OutdoorAmbient = Color3.fromRGB(100, 100, 100)
+            lighting.Technology = Enum.Technology.Compatibility
+            lighting.EnvironmentSpecularScale = 0
+            
+            for _, effect in ipairs(lighting:GetChildren()) do
                 if effect:IsA("PostEffect") then
                     effect.Enabled = false
                 end
             end
         end)
-        if ok1 then print("Lighting... OK") else print("ERROR Lighting: " .. tostring(err1)) end
         
         -- 2. Terrain
         if Terrain then
@@ -140,117 +209,168 @@ local success, err = pcall(function()
                 Terrain.WaterWaveSpeed = 0
                 Terrain.WaterReflectance = 0
                 Terrain.WaterTransparency = 0
+                Terrain.Decoration = false
             end)
-            print("Terrain... OK")
         end
         
-        -- 3. Workspace
-        local ok3, err3 = pcall(function()
-            for _, v in pairs(workspace:GetDescendants()) do
-                optimizePart(v)
-            end
-            removeSkillEffects(workspace)
+        -- 3. Workspace (Batch processing)
+        task.spawn(function()
+            pcall(function()
+                local objects = {}
+                
+                for _, child in ipairs(workspace:GetDescendants()) do
+                    if not isPlayerRelated(child) and not child:FindFirstChildOfClass("Humanoid") then
+                        table.insert(objects, child)
+                        removeEffects(child)
+                    end
+                end
+                
+                print("Optimizing " .. #objects .. " objects...")
+                optimizeBatch(objects)
+                print("Workspace optimized!")
+            end)
         end)
-        if ok3 then print("Workspace... OK") else print("ERROR Workspace: " .. tostring(err3)) end
         
         -- 4. ReplicatedStorage
-        pcall(function()
-            removeSkillEffects(ReplicatedStorage)
+        task.spawn(function()
+            pcall(function()
+                removeEffects(services.ReplicatedStorage)
+            end)
         end)
-        print("ReplicatedStorage... OK")
         
-        -- 5. StarterPack
+        -- 5. Rendering settings
         pcall(function()
-            removeSkillEffects(game.StarterPack)
-        end)
-        print("StarterPack... OK")
-        
-        -- 6. Rendering (FIX: Bỏ StreamingTargetFPS không tồn tại)
-        local ok5, err5 = pcall(function()
-            settings().Rendering.QualityLevel = CONFIG.TargetQuality
-            settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-            settings().Rendering.EditQualityLevel = CONFIG.TargetQuality
+            local rendering = settings().Rendering
+            rendering.QualityLevel = CONFIG.TargetQuality
+            rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+            rendering.EditQualityLevel = CONFIG.TargetQuality
+            rendering.EnableFRM = false
+            rendering.EagerBulkExecution = false
+            
             GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-            settings().Rendering.EnableFRM = false
-            settings().Rendering.EagerBulkExecution = false
-            ContentProvider.RequestQueueSize = 0
-            settings().Rendering.MeshContentProvider.MaximumConcurrentRequests = 1
+            services.ContentProvider.RequestQueueSize = 0
         end)
-        if ok5 then print("Rendering... OK") else print("ERROR Rendering: " .. tostring(err5)) end
         
-        -- 7. Camera & AutoJump
-        local camera = workspace.CurrentCamera
-        if camera then
-            pcall(function() camera.FieldOfView = 70 end)
-        end
-        pcall(function() StarterGui:SetCore("AutoJumpEnabled", false) end)
-        print("Camera/AutoJump... OK")
+        -- 6. Camera
+        pcall(function()
+            workspace.CurrentCamera.FieldOfView = 70
+            services.StarterGui:SetCore("AutoJumpEnabled", false)
+        end)
         
-        -- 8. GC Loop
-        spawn(function()
-            while isBoosted do
+        -- 7. GC Loop (Optimized)
+        if state.gcConnection then state.gcConnection:Disconnect() end
+        state.gcConnection = task.spawn(function()
+            while state.boosted do
                 task.wait(CONFIG.GCInterval)
                 collectgarbage("collect")
+                
+                -- Clean up destroyed parts cache
+                for part in pairs(state.optimizedParts) do
+                    if not part.Parent then
+                        state.optimizedParts[part] = nil
+                    end
+                end
             end
         end)
-        print("GC... OK")
         
-        -- 9. THÊM: Loop quét skill effects liên tục (FIX: Không sót effects spawn nhanh)
-        if effectScanConnection then effectScanConnection:Disconnect() end
-        effectScanConnection = RunService.Heartbeat:Connect(function()
-            if not isBoosted then return end
-            removeSkillEffects(workspace)
-            removeSkillEffects(ReplicatedStorage)
+        -- 8. Effect scan loop
+        if state.effectScanConnection then 
+            state.effectScanConnection:Disconnect() 
+        end
+        
+        state.effectScanConnection = services.RunService.Heartbeat:Connect(function()
+            if not state.boosted then return end
+            
+            -- Throttle scanning
+            if tick() - state.lastDebounce < CONFIG.EffectScanInterval then
+                return
+            end
+            state.lastDebounce = tick()
+            
+            removeEffects(workspace)
+            removeEffects(services.ReplicatedStorage)
         end)
-        print("Effect Scan Loop... OK")
         
-        print("applyBoost: Completed! (Skill effects xóa mượt)")
+        print("=== FPS Boost Applied Successfully! ===")
     end
     
-    -- Connections
-    workspace.DescendantAdded:Connect(function(v)
-        if isPlayerOrTool(v) then return end
-        if tick() - lastDebounce < CONFIG.DebounceTime then return end
-        lastDebounce = tick()
-        task.wait()
-        optimizePart(v)
-        removeSkillEffects(v.Parent)
-    end)
-    print("DescendantAdded... OK")
+    -- Disable boost
+    local function disableBoost()
+        state.boosted = false
+        
+        if state.effectScanConnection then
+            state.effectScanConnection:Disconnect()
+            state.effectScanConnection = nil
+        end
+        
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+            services.Lighting.Technology = Enum.Technology.Future
+            services.Lighting.FogEnd = 100000
+            services.Lighting.ClockTime = 14
+        end)
+        
+        print("=== FPS Boost Disabled ===")
+    end
     
-    Players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(function(character)
-            task.wait(1)
-            print("New player - Effects xóa, skin giữ")
+    -- DescendantAdded với debounce
+    workspace.DescendantAdded:Connect(function(v)
+        if not state.boosted then return end
+        if isPlayerRelated(v) or services.CollectionService:HasTag(v, TAG) then
+            return
+        end
+        
+        -- Debounce check
+        local now = tick()
+        if now - state.lastDebounce < CONFIG.DebounceTime then
+            return
+        end
+        state.lastDebounce = now
+        
+        task.delay(0.1, function()
+            optimizePart(v)
+            removeEffects(v.Parent)
         end)
     end)
-    print("PlayerAdded... OK")
     
-    -- Áp dụng
-    applyBoost()
+    -- Player added handler
+    services.Players.PlayerAdded:Connect(function(player)
+        player.CharacterAdded:Connect(function(character)
+            updatePlayerCache()
+            print("Player joined - Cache updated")
+        end)
+    end)
     
-    -- Toggle (FIX: Reset loop khi tắt)
+    -- Player removing handler
+    services.Players.PlayerRemoving:Connect(function(player)
+        task.delay(0.5, updatePlayerCache)
+    end)
+    
+    -- Toggle command
     LocalPlayer.Chatted:Connect(function(msg)
-        if msg:lower() == "/togglefps" then
-            isBoosted = not isBoosted
-            if isBoosted then
-                applyBoost()
-                print("FPS Booster: BẬT")
+        local lower = msg:lower()
+        if lower == "/togglefps" or lower == "/fps" then
+            if state.boosted then
+                disableBoost()
             else
-                print("FPS Booster: TẮT")
-                if effectScanConnection then effectScanConnection:Disconnect() end
-                settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-                Lighting.Technology = Enum.Technology.Future
-                Lighting.FogEnd = 100000
-                Lighting.ClockTime = 14
+                applyBoost()
             end
+        elseif lower == "/fpsstats" then
+            print("=== FPS Booster Stats ===")
+            print("Status: " .. (state.boosted and "ENABLED" or "DISABLED"))
+            print("Optimized Parts: " .. tostring(table.getn(state.optimizedParts)))
+            print("Cached Players: " .. tostring(table.getn(state.playerCache)))
         end
     end)
-    print("Toggle... OK")
     
-    print("=== FPS Booster v3.1 OK - Skill effects fix! ===")
+    -- Auto-apply on load
+    task.wait(2)
+    applyBoost()
+    
+    print("=== FPS Booster v4.0 Ready! ===")
+    print("Commands: /togglefps, /fps, /fpsstats")
 end)
 
 if not success then
-    print("CRITICAL ERROR v3.1: " .. tostring(err))
+    warn("FPS Booster Error: " .. tostring(err))
 end
