@@ -1,11 +1,7 @@
--- Blox Fruits FPS Booster v4.4 - The Ghost Protocol
--- An intelligent, adaptive, and undetectable performance enhancement system.
-
 local success, err = pcall(function()
     -- OBFUSCATED LOGGING
     print("System core loading...")
 
-    -- Services (Cache một lần)
     local services = {
         Lighting = game:GetService("Lighting"),
         Players = game:GetService("Players"),
@@ -20,7 +16,6 @@ local success, err = pcall(function()
     local UserSettings = UserSettings()
     local GameSettings = UserSettings:GetService("UserGameSettings")
 
-    -- ADVANCED: Fingerprint Randomization - Mỗi session là duy nhất
     local SESSION_FINGERPRINT = {
         gcBase = math.random(75, 95),
         scanBase = math.random(2.0, 3.5),
@@ -28,7 +23,6 @@ local success, err = pcall(function()
         fastScanChance = math.random(0.08, 0.15) -- Xác suất fast scan
     }
 
-    -- ADVANCED: Deeper Adaptive Logic - Đa giai đoạn
     local ADAPTIVE_STAGES = {
         {time = 0,    gc = {SESSION_FINGERPRINT.gcBase, SESSION_FINGERPRINT.gcBase + 10}, skip = 0.05}, -- Rất cẩn thận
         {time = 600,  gc = {SESSION_FINGERPRINT.gcBase - 5, SESSION_FINGERPRINT.gcBase + 15}, skip = 0.08}, -- Cẩn thận
@@ -36,7 +30,6 @@ local success, err = pcall(function()
         {time = 3600, gc = {SESSION_FINGERPRINT.gcBase - 20, SESSION_FINGERPRINT.gcBase + 30}, skip = 0.15}  -- Thoải mái
     }
 
-    -- ANTIBAN: Cấu hình chống phát hiện nâng cao
     local ANTIBAN_CONFIG = {
         Enabled = true,
         DebugMode = false,
@@ -57,7 +50,7 @@ local success, err = pcall(function()
     local LEARNING_CONFIG = {
         samples = {},
         adaptiveQuality = true,
-        sampleInterval = 30, -- Giây giữa mỗi lần lấy mẫu FPS
+        sampleInterval = 30,
         maxSamples = 10
     }
 
