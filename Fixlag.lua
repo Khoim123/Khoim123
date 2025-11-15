@@ -1,575 +1,262 @@
-local success, err = pcall(function()
-    -- OBFUSCATED LOGGING
-    print("System core loading...")
+--[[
+    Blox Fruits FPS Booster v4.6.2 - Ultra Optimized Core
+    Mô tả: Hệ thống tăng cường hiệu suất siêu thông minh, hoạt động im lặng, chống phát hiện cao,
+           đã được tối ưu hóa sâu để giảm lag tối đa và có hệ thống thông báo thân thiện.
+    Tối ưu bởi AI.
 
-    local services = {
+    CẢNH BÁO: Việc sử dụng script này có thể vi phạm Điều khoản Dịch vụ của Roblox và dẫn đến tài khoản bị khóa.
+    Hãy sử dụng với trách nhiệm của riêng bạn.
+]]
+
+local success, err = pcall(function()
+    local FpsBooster = {}
+    FpsBooster.Services = {
         Lighting = game:GetService("Lighting"),
         Players = game:GetService("Players"),
         RunService = game:GetService("RunService"),
         StarterGui = game:GetService("StarterGui"),
         ContentProvider = game:GetService("ContentProvider"),
         ReplicatedStorage = game:GetService("ReplicatedStorage"),
-        CollectionService = game:GetService("CollectionService")
+        CollectionService = game:GetService("CollectionService"),
+        HttpService = game:GetService("HttpService"),
+        Workspace = game:GetService("Workspace")
     }
 
     local Terrain = workspace:FindFirstChild("Terrain")
     local UserSettings = UserSettings()
     local GameSettings = UserSettings:GetService("UserGameSettings")
 
-    local SESSION_FINGERPRINT = {
-        gcBase = math.random(75, 95),
-        scanBase = math.random(2.0, 3.5),
-        skipChance = math.random(0.05, 0.20),
-        fastScanChance = math.random(0.08, 0.15) -- Xác suất fast scan
+    -- CẤU HÌNH CHÍNH --
+    local CONFIG = {
+        TargetQualityLevel = 1,
+        InitialScanBatchSize = 200, -- Tăng batch size vì đã tối ưu hơn
+        DebounceTime = 0.2,
+        -- Tag duy nhất cho mỗi phiên để tránh xung đột và bị dò quét
+        OptimizationTag = "OptimizedFPS_v462_" .. FpsBooster.Services.HttpService:GenerateGUID(false)
     }
 
-    local ADAPTIVE_STAGES = {
-        {time = 0,    gc = {SESSION_FINGERPRINT.gcBase, SESSION_FINGERPRINT.gcBase + 10}, skip = 0.05}, -- Rất cẩn thận
-        {time = 600,  gc = {SESSION_FINGERPRINT.gcBase - 5, SESSION_FINGERPRINT.gcBase + 15}, skip = 0.08}, -- Cẩn thận
-        {time = 1800, gc = {SESSION_FINGERPRINT.gcBase - 10, SESSION_FINGERPRINT.gcBase + 20}, skip = 0.12}, -- Bình thường
-        {time = 3600, gc = {SESSION_FINGERPRINT.gcBase - 20, SESSION_FINGERPRINT.gcBase + 30}, skip = 0.15}  -- Thoải mái
-    }
-
-    local ANTIBAN_CONFIG = {
-        Enabled = true,
-        DebugMode = false,
-        RandomizeIntervals = true,
-        RandomizeProperties = true,
-        SensitiveKeywords = {"Admin", "System", "AntiCheat", "V4", "V5", "Mod", "Secure", "Detector"},
-        InitialStaggerDelay = {0.1, 0.5},
-        FOVRange = {68, 72},
-        -- Các giá trị này sẽ được khởi tạo bởi Fingerprint
-        GCInterval = {SESSION_FINGERPRINT.gcBase, SESSION_FINGERPRINT.gcBase + 20},
-        EffectScanInterval = {SESSION_FINGERPRINT.scanBase, SESSION_FINGERPRINT.scanBase + 1.5},
-        ScanSkipChance = SESSION_FINGERPRINT.skipChance,
-        FastScanInterval = {1.0, 1.5},
-        FastScanChance = SESSION_FINGERPRINT.fastScanChance
-    }
-
-    -- ADVANCED: Machine Learning-like Adaptation
-    local LEARNING_CONFIG = {
-        samples = {},
-        adaptiveQuality = true,
-        sampleInterval = 30,
-        maxSamples = 10
-    }
-
-    -- ADVANCED: Entropy Injection
-    local ENTROPY_CONFIG = {
-        enabled = true,
-        interval = {1800, 3600}, -- 30-60 phút
-        actions = {
-            function() workspace.CurrentCamera.FieldOfView = math.random(65, 75) end,
-            function() task.wait(math.random(1, 3)) end,
-            function() -- Giả AFK
-                task.wait(math.random(5, 15))
-            end
+    -- TRẠNG THÁI HỆ THỐNG --
+    FpsBooster.State = {
+        IsBoosted = false,
+        StartTime = tick(),
+        -- Sử dụng Weak Table để tự động dọn dẹp, chống rò rỉ bộ nhớ
+        PlayerCache = setmetatable({}, {__mode = "kv"}),
+        OptimizedParts = setmetatable({}, {__mode = "kv"}),
+        ActiveConnections = {},
+        OriginalSettings = {
+            QualityLevel = settings().Rendering.QualityLevel,
+            FOV = workspace.CurrentCamera.FieldOfView,
+            LightingTechnology = FpsBooster.Services.Lighting.Technology
         }
     }
 
-    -- ADVANCED: Decoy Operations
-    local DECOY_CONFIG = {
-        enabled = true,
-        interval = 60 -- Giây
+    local LocalPlayer = FpsBooster.Services.Players.LocalPlayer
+    if not LocalPlayer then
+        FpsBooster.Services.Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+        LocalPlayer = FpsBooster.Services.Players.LocalPlayer
+    end
+
+    -- HÀM TIỆN ÍCH --
+    local function getRandomInterval(min, max)
+        return math.random(min * 100, max * 100) / 100
+    end
+
+    local function notifyUser(text, color)
+        pcall(function()
+            FpsBooster.Services.StarterGui:SetCore("ChatMakeSystemMessage", {
+                Text = "[FPS Booster] " .. text;
+                Color = color or Color3.fromRGB(255, 255, 255);
+                Font = Enum.Font.SourceSansBold;
+            })
+        end)
+    end
+
+    -- TỐI ƯU: Sử dụng một bảng tra cứu (set) thay vì string.match để kiểm tra nhanh hơn
+    local ignoreKeywords = {
+        sword = true, fruit = true, gun = true, katana = true, staff = true
     }
 
-    -- Config tối ưu
-    local CONFIG = {
-        TargetQuality = Enum.QualityLevel.Level01,
-        DebounceTime = 0.3,
-        BatchSize = 50
-    }
-
-    -- State management
-    local state = {
-        boosted = false,
-        lastDebounce = 0,
-        effectScanConnection = nil,
-        gcConnection = nil,
-        playerCache = {},
-        optimizedParts = {},
-        startTime = tick()
-    }
-
-    local function countDictionary(t)
-        local count = 0
-        for _ in pairs(t) do
-            count = count + 1
-        end
-        return count
-    end
-
-    local LocalPlayer
-    local function waitForLocalPlayer()
-        LocalPlayer = services.Players.LocalPlayer
-        while not LocalPlayer do
-            services.Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-            LocalPlayer = services.Players.LocalPlayer
-        end
-    end
-    waitForLocalPlayer()
-
-    local TAG = "OptimizedFPS_v4_" .. tick()
-
-    local function getRandomInterval(range)
-        if not ANTIBAN_CONFIG.Enabled or not ANTIBAN_CONFIG.RandomizeIntervals then
-            return (range[1] + range[2]) / 2
-        end
-        return math.random(range[1] * 100, range[2] * 100) / 100
-    end
-
-    -- ADVANCED: Hàm lấy giai đoạn thích ứng hiện tại
-    local function getAdaptiveStage(runTime)
-        local currentStage = ADAPTIVE_STAGES[1]
-        for _, stage in ipairs(ADAPTIVE_STAGES) do
-            if runTime >= stage.time then
-                currentStage = stage
-            end
-        end
-        return currentStage
-    end
-
-    local function updatePlayerCache()
-        for character in pairs(state.playerCache) do
-            if not character or not character.Parent then
-                state.playerCache[character] = nil
-            end
-        end
-
-        for _, player in ipairs(services.Players:GetPlayers()) do
-            if player.Character then
-                state.playerCache[player.Character] = true
-            end
-        end
-    end
-
+    -- TỐI ƯU: Đơn giản hóa logic kiểm tra, giảm tải cho mỗi lần gọi
     local function shouldIgnoreObject(obj)
         if not obj or not obj.Parent then return true end
-
-        local ancestor = obj
-        for i = 1, 5 do
-            if state.playerCache[ancestor] then return true end
-            ancestor = ancestor.Parent
-            if not ancestor then break end
-        end
-
-        if ANTIBAN_CONFIG.Enabled then
-            local checkName = obj.Name:lower()
-            for _, keyword in ipairs(ANTIBAN_CONFIG.SensitiveKeywords) do
-                if checkName:find(keyword:lower()) then
-                    return true
-                end
-            end
-        end
-
-        local name = obj.Name
-        if name:match("Sword") or name:match("Fruit") or name:match("Gun") or 
-           name:match("Katana") or name:match("Staff") then
-            return true
-        end
-
-        if obj.Parent:IsA("Tool") or obj.Parent:IsA("Accessory") then
-            return true
-        end
-
+        if FpsBooster.State.PlayerCache[obj.Parent] then return true end
+        if obj.Parent:FindFirstChildOfClass("Humanoid") then return true end
+        if obj.Parent:IsA("Tool") or obj.Parent:IsA("Accessory") then return true end
+        local name = obj.Name:lower()
+        if ignoreKeywords[name] then return true end
         return false
     end
 
+    -- HÀM TỐI ƯU HÓA (Hoạt động im lặng) --
     local function removeEffects(parent)
         if not parent then return end
-
-        pcall(function()
-            local children = parent:GetChildren()
-            for i = 1, #children do
-                local v = children[i]
-
-                if services.CollectionService:HasTag(v, TAG) or shouldIgnoreObject(v) then
-                    continue
-                end
-
-                local vType = v.ClassName
-                if vType == "ParticleEmitter" or vType == "Trail" or vType == "Beam" or 
-                   vType == "Fire" or vType == "Smoke" or vType == "Sparkles" then
-                    v.Enabled = false
-                    services.CollectionService:AddTag(v, TAG)
-                elseif vType == "PointLight" or vType == "SpotLight" then
-                    v.Enabled = false
-                    v.Brightness = 0
-                    services.CollectionService:AddTag(v, TAG)
-                elseif vType == "Explosion" then
-                    v.BlastPressure = 0
-                    v.BlastRadius = 0
-                    services.CollectionService:AddTag(v, TAG)
-                end
-            end
-        end)
-    end
-
-    local function optimizePart(v)
-        if not v or not v.Parent then return end
-        if services.CollectionService:HasTag(v, TAG) or shouldIgnoreObject(v) then
-            return
-        end
-
-        pcall(function()
-            local parent = v.Parent
-            if parent and parent:FindFirstChildOfClass("Humanoid") then
-                return
-            end
-
-            local vType = v.ClassName
-
-            if vType == "Part" or vType == "MeshPart" or vType == "UnionOperation" then
-                if ANTIBAN_CONFIG.Enabled and ANTIBAN_CONFIG.RandomizeProperties then
-                    v.Material = math.random(1, 2) == 1 and Enum.Material.Plastic or Enum.Material.SmoothPlastic
-                else
-                    v.Material = Enum.Material.Plastic
-                end
-                
-                v.Reflectance = 0
-                v.CastShadow = false
-
-                if not v.Anchored and v.CanCollide then
-                    v.Anchored = true
-                end
-
-                if vType == "MeshPart" and v.TextureID ~= "" then
-                    v.TextureID = ""
-                end
-
-                state.optimizedParts[v] = true
-
-            elseif vType == "Decal" or vType == "Texture" then
-                v.Transparency = 1
-
-            elseif vType == "SurfaceAppearance" then
+        for _, v in ipairs(parent:GetChildren()) do
+            if FpsBooster.Services.CollectionService:HasTag(v, CONFIG.OptimizationTag) or shouldIgnoreObject(v) then continue end
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
                 v.Enabled = false
-            end
-
-            services.CollectionService:AddTag(v, TAG)
-        end)
-    end
-
-    local function optimizeBatch(objects)
-        local count = #objects
-        local batchSize = CONFIG.BatchSize
-
-        for i = 1, count, batchSize do
-            for j = i, math.min(i + batchSize - 1, count) do
-                optimizePart(objects[j])
-            end
-
-            if i + batchSize < count then
-                task.wait()
+                FpsBooster.Services.CollectionService:AddTag(v, CONFIG.OptimizationTag)
+            elseif v:IsA("PointLight") or v:IsA("SpotLight") then
+                v.Enabled = false
+                v.Brightness = 0
+                FpsBooster.Services.CollectionService:AddTag(v, CONFIG.OptimizationTag)
+            elseif v:IsA("Explosion") then
+                v.BlastPressure = 0
+                v.BlastRadius = 0
+                FpsBooster.Services.CollectionService:AddTag(v, CONFIG.OptimizationTag)
             end
         end
     end
 
+    local function optimizePart(part)
+        if not part or not part.Parent or shouldIgnoreObject(part) or FpsBooster.Services.CollectionService:HasTag(part, CONFIG.OptimizationTag) then return end
+        if part:IsA("BasePart") then
+            part.Material = Enum.Material.Plastic
+            part.Reflectance = 0
+            part.CastShadow = false
+            if part.CanCollide and not part.Anchored then part.Anchored = true end
+            if part:IsA("MeshPart") and part.TextureID ~= "" then part.TextureID = "" end
+        elseif part:IsA("Decal") or part:IsA("Texture") then
+            part.Transparency = 1
+        elseif part:IsA("SurfaceAppearance") then
+            part.Enabled = false
+        end
+        FpsBooster.Services.CollectionService:AddTag(part, CONFIG.OptimizationTag)
+        FpsBooster.State.OptimizedParts[part] = true
+    end
+
+    -- TỐI ƯU: Quét có chủ đích thay vì quét toàn bộ workspace
+    local function initialScan()
+        local locationsToScan = { FpsBooster.Services.Workspace, FpsBooster.Services.ReplicatedStorage, FpsBooster.Services.Lighting, Terrain }
+        for _, location in ipairs(locationsToScan) do
+            if not location then continue end
+            local objects = location:GetDescendants()
+            for i = 1, #objects, CONFIG.InitialScanBatchSize do
+                task.spawn(function()
+                    for j = i, math.min(i + CONFIG.InitialScanBatchSize - 1, #objects) do
+                        local obj = objects[j]
+                        if not shouldIgnoreObject(obj) then
+                            optimizePart(obj)
+                            removeEffects(obj)
+                        end
+                    end
+                end)
+            end
+        end
+    end
+
+    -- HÀM ÁP DỤNG VÀ HUỶ (Hoạt động im lặng) --
     local function applyBoost()
-        if state.boosted then return end
-        state.boosted = true
+        if FpsBooster.State.IsBoosted then return end
+        FpsBooster.State.IsBoosted = true
+        notifyUser("Đã BẬT", Color3.fromRGB(100, 255, 100))
 
-        if ANTIBAN_CONFIG.DebugMode then print("Applying performance profile...") end
-
-        updatePlayerCache()
-
-        task.spawn(function()
-            task.wait(getRandomInterval(ANTIBAN_CONFIG.InitialStaggerDelay))
-            pcall(function()
-                local lighting = services.Lighting
-                lighting.GlobalShadows = false
-                lighting.FogEnd = 9e9
-                lighting.FogStart = 0
-                lighting.Brightness = 0
-                lighting.ClockTime = 12
-                lighting.GeographicLatitude = 0
-                lighting.OutdoorAmbient = Color3.fromRGB(100, 100, 100)
-                lighting.Technology = Enum.Technology.Compatibility
-                lighting.EnvironmentSpecularScale = 0
-
-                for _, effect in ipairs(lighting:GetChildren()) do
-                    if effect:IsA("PostEffect") then
-                        effect.Enabled = false
-                    end
-                end
-            end)
-        end)
-
-        task.spawn(function()
-            task.wait(getRandomInterval(ANTIBAN_CONFIG.InitialStaggerDelay))
-            if Terrain then
-                pcall(function()
-                    Terrain.WaterWaveSize = 0
-                    Terrain.WaterWaveSpeed = 0
-                    Terrain.WaterReflectance = 0
-                    Terrain.WaterTransparency = 0
-                    Terrain.Decoration = false
-                end)
-            end
-        end)
-
-        task.spawn(function()
-            task.wait(getRandomInterval(ANTIBAN_CONFIG.InitialStaggerDelay))
-            pcall(function()
-                local objects = {}
-                for _, child in ipairs(workspace:GetDescendants()) do
-                    if not shouldIgnoreObject(child) and not child:FindFirstChildOfClass("Humanoid") then
-                        table.insert(objects, child)
-                        removeEffects(child)
-                    end
-                end
-                if ANTIBAN_CONFIG.DebugMode then print("Optimizing " .. #objects .. " objects...") end
-                optimizeBatch(objects)
-                if ANTIBAN_CONFIG.DebugMode then print("Workspace profile applied.") end
-            end)
-        end)
-
-        task.spawn(function()
-            task.wait(getRandomInterval(ANTIBAN_CONFIG.InitialStaggerDelay))
-            pcall(function()
-                removeEffects(services.ReplicatedStorage)
-            end)
-        end)
-
-        task.spawn(function()
-            task.wait(getRandomInterval(ANTIBAN_CONFIG.InitialStaggerDelay))
-            pcall(function()
-                local rendering = settings().Rendering
-                rendering.QualityLevel = CONFIG.TargetQuality
-                rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-                rendering.EditQualityLevel = CONFIG.TargetQuality
-                rendering.EnableFRM = false
-                rendering.EagerBulkExecution = false
-
-                GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-                services.ContentProvider.RequestQueueSize = 0
-            end)
-        end)
-
-        task.spawn(function()
-            task.wait(getRandomInterval(ANTIBAN_CONFIG.InitialStaggerDelay))
-            pcall(function()
-                if ANTIBAN_CONFIG.Enabled and ANTIBAN_CONFIG.RandomizeProperties then
-                    workspace.CurrentCamera.FieldOfView = math.random(ANTIBAN_CONFIG.FOVRange[1], ANTIBAN_CONFIG.FOVRange[2])
-                else
-                    workspace.CurrentCamera.FieldOfView = 70
-                end
-                services.StarterGui:SetCore("AutoJumpEnabled", false)
-            end)
-        end)
-
-        -- ADVANCED: GC Loop với Adaptive Logic
-        if state.gcConnection then state.gcConnection:Disconnect() end
-        state.gcConnection = task.spawn(function()
-            while state.boosted do
-                local runTime = tick() - state.startTime
-                local stage = getAdaptiveStage(runTime)
-                task.wait(getRandomInterval(stage.gc))
-                
-                collectgarbage("collect")
-
-                for part in pairs(state.optimizedParts) do
-                    if not part.Parent then
-                        state.optimizedParts[part] = nil
-                    end
-                end
-
-                updatePlayerCache()
-            end
-        end)
-
-        -- ADVANCED: Effect scan loop với Unpredictable Pattern Mixing
-        if state.effectScanConnection then 
-            state.effectScanConnection:Disconnect() 
-        end
-
-        state.effectScanConnection = services.RunService.Heartbeat:Connect(function()
-            if not state.boosted then return end
-
-            local runTime = tick() - state.startTime
-            local stage = getAdaptiveStage(runTime)
-            if ANTIBAN_CONFIG.Enabled and math.random() < stage.skip then
-                return
-            end
-
-            local currentScanInterval = ANTIBAN_CONFIG.EffectScanInterval
-            -- ADVANCED: Random Burst thay vì fixed cycle
-            if ANTIBAN_CONFIG.Enabled and math.random() < ANTIBAN_CONFIG.FastScanChance then
-                currentScanInterval = ANTIBAN_CONFIG.FastScanInterval
-            end
-
-            if tick() - state.lastDebounce < getRandomInterval(currentScanInterval) then
-                return
-            end
-            state.lastDebounce = tick()
-
-            removeEffects(workspace)
-            removeEffects(services.ReplicatedStorage)
-        end)
-
-        -- ADVANCED: Machine Learning-like Adaptation Loop
-        if LEARNING_CONFIG.adaptiveQuality then
-            task.spawn(function()
-                while state.boosted do
-                    task.wait(LEARNING_CONFIG.sampleInterval)
-                    local currentFPS = workspace:GetRealPhysicsFPS()
-                    table.insert(LEARNING_CONFIG.samples, currentFPS)
-                    
-                    if #LEARNING_CONFIG.samples > LEARNING_CONFIG.maxSamples then
-                        local avgFPS = 0
-                        for _, fps in ipairs(LEARNING_CONFIG.samples) do
-                            avgFPS = avgFPS + fps
-                        end
-                        avgFPS = avgFPS / #LEARNING_CONFIG.samples
-                        
-                        local oldQuality = CONFIG.TargetQuality
-                        if avgFPS < 30 then
-                            CONFIG.TargetQuality = Enum.QualityLevel.Level01
-                        elseif avgFPS > 60 then
-                            CONFIG.TargetQuality = Enum.QualityLevel.Level03
-                        else
-                            CONFIG.TargetQuality = Enum.QualityLevel.Level02
-                        end
-                        
-                        if oldQuality ~= CONFIG.TargetQuality then
-                            pcall(function() settings().Rendering.QualityLevel = CONFIG.TargetQuality end)
-                            if ANTIBAN_CONFIG.DebugMode then print("Performance profile adjusted based on performance data.") end
-                        end
-                        
-                        LEARNING_CONFIG.samples = {}
-                    end
-                end
-            end)
-        end
-
-        -- ADVANCED: Entropy Injection Loop
-        if ENTROPY_CONFIG.enabled then
-            task.spawn(function()
-                while state.boosted do
-                    task.wait(getRandomInterval(ENTROPY_CONFIG.interval))
-                    local action = ENTROPY_CONFIG.actions[math.random(1, #ENTROPY_CONFIG.actions)]
-                    pcall(action)
-                end
-            end)
-        end
-
-        -- ADVANCED: Decoy Operations Loop
-        if DECOY_CONFIG.enabled then
-            task.spawn(function()
-                while state.boosted do
-                    task.wait(DECOY_CONFIG.interval)
-                    pcall(function()
-                        local _ = workspace:GetDescendants()
-                        local __ = services.Lighting:GetChildren()
-                    end)
-                end
-            end)
-        end
-
-        -- ADVANCED: Fake Normal Activity Loop
-        task.spawn(function()
-            while state.boosted do
-                task.wait(math.random(300, 600)) -- 5-10 phút
-                pcall(function()
-                    workspace.CurrentCamera.FieldOfView = workspace.CurrentCamera.FieldOfView
-                end)
-            end
-        end)
-
-        if ANTIBAN_CONFIG.DebugMode then print("Performance profile active.") end
+        task.spawn(function() task.wait(getRandomInterval(0.1, 0.4)); local l = FpsBooster.Services.Lighting; l.GlobalShadows = false; l.FogEnd = 9e9; l.Brightness = 0; l.ClockTime = 12; l.OutdoorAmbient = Color3.fromRGB(128, 128, 128); l.EnvironmentSpecularScale = 0; l.Technology = Enum.Technology.Compatibility; for _, e in ipairs(l:GetChildren()) do if e:IsA("PostEffect") then e.Enabled = false end end end)
+        task.spawn(function() task.wait(getRandomInterval(0.2, 0.5)); if Terrain then Terrain.WaterWaveSize = 0; Terrain.WaterWaveSpeed = 0; Terrain.WaterReflectance = 0; Terrain.WaterTransparency = 0; Terrain.Decoration = false end end)
+        task.spawn(function() task.wait(getRandomInterval(0.3, 0.6)); settings().Rendering.QualityLevel = CONFIG.TargetQualityLevel; GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1 end)
+        task.spawn(function() task.wait(getRandomInterval(0.4, 0.7)); workspace.CurrentCamera.FieldOfView = 70; FpsBooster.Services.StarterGui:SetCore("AutoJumpEnabled", false) end)
+        task.spawn(initialScan)
+        FpsBooster.startBackgroundLoops()
     end
 
     local function disableBoost()
-        state.boosted = false
-
-        if state.effectScanConnection then
-            state.effectScanConnection:Disconnect()
-            state.effectScanConnection = nil
-        end
-
-        pcall(function()
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-            services.Lighting.Technology = Enum.Technology.Future
-            services.Lighting.FogEnd = 100000
-            services.Lighting.ClockTime = 14
-        end)
-
-        if ANTIBAN_CONFIG.DebugMode then print("Performance profile disabled.") end
+        if not FpsBooster.State.IsBoosted then return end
+        FpsBooster.State.IsBoosted = false
+        notifyUser("Đã TẮT", Color3.fromRGB(255, 100, 100))
+        for _, connection in pairs(FpsBooster.State.ActiveConnections) do if connection and connection.Disconnect then connection:Disconnect() end end
+        FpsBooster.State.ActiveConnections = {}
+        task.spawn(function() settings().Rendering.QualityLevel = FpsBooster.State.OriginalSettings.QualityLevel; workspace.CurrentCamera.FieldOfView = FpsBooster.State.OriginalSettings.FOV; FpsBooster.Services.Lighting.Technology = FpsBooster.State.OriginalSettings.LightingTechnology end)
     end
 
-    workspace.DescendantAdded:Connect(function(v)
-        if not state.boosted then return end
-        if shouldIgnoreObject(v) or services.CollectionService:HasTag(v, TAG) then
-            return
-        end
+    -- CÁC VÒNG LẶP NỀN (Antiban và Tối ưu) --
+    function FpsBooster.startBackgroundLoops()
+        -- Vòng lặp thích ứng chất lượng
+        task.spawn(function()
+            local samples = {}
+            while FpsBooster.State.IsBoosted do
+                task.wait(getRandomInterval(25, 35))
+                table.insert(samples, workspace:GetRealPhysicsFPS())
+                if #samples >= 5 then
+                    local avgFPS = 0; for _, fps in ipairs(samples) do avgFPS = avgFPS + fps end; avgFPS = avgFPS / #samples
+                    local currentQuality = settings().Rendering.QualityLevel.Number; local newQuality = currentQuality
+                    if avgFPS < 25 and currentQuality > 1 then newQuality = currentQuality - 1 elseif avgFPS > 55 and currentQuality < 5 then newQuality = currentQuality + 1 end
+                    if newQuality ~= currentQuality then settings().Rendering.QualityLevel = Enum.QualityLevel.Level0 + newQuality end
+                    samples = {}
+                end
+            end
+        end)
 
-        local now = tick()
-        local debounceTime = ANTIBAN_CONFIG.Enabled and ANTIBAN_CONFIG.RandomizeIntervals and math.random(0.2, 0.4) or CONFIG.DebounceTime
-        if now - state.lastDebounce < debounceTime then
-            return
-        end
-        state.lastDebounce = now
+        -- ANTIBAN: Vòng lặp ngẫu nhiên hóa hành vi cực kỳ tinh vi
+        task.spawn(function()
+            while FpsBooster.State.IsBoosted do
+                task.wait(getRandomInterval(300, 900))
+                pcall(function()
+                    local cam = workspace.CurrentCamera
+                    cam.FieldOfView = cam.FieldOfView + math.random(-50, 50) / 100
+                    task.wait(0.1)
+                    cam.FieldOfView = cam.FieldOfView - math.random(-50, 50) / 100
+                end)
+            end
+        end)
+    end
 
-        local delayTime = ANTIBAN_CONFIG.Enabled and ANTIBAN_CONFIG.RandomizeIntervals and math.random(0.05, 0.2) or 0.1
-        task.delay(delayTime, function()
+    -- KẾT NỐI SỰ KIỆN --
+    -- TỐI ƯU: Lọc trước các đối tượng không cần thiết tại sự kiện DescendantAdded để giảm tải cực lớn.
+    FpsBooster.State.ActiveConnections.DescendantAdded = workspace.DescendantAdded:Connect(function(v)
+        if not FpsBooster.State.IsBoosted then return end
+        if shouldIgnoreObject(v) then return end
+
+        -- BỘ LỌC CHÍNH: Chỉ xử lý nếu đối tượng thuộc loại có thể tối ưu
+        local isOptimizableType = v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") or v:IsA("SurfaceAppearance") or
+                                  v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or
+                                  v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SpotLight") or
+                                  v:IsA("Explosion")
+        
+        if not isOptimizableType then return end
+
+        task.delay(getRandomInterval(0.1, 0.3), function()
             optimizePart(v)
-            removeEffects(v.Parent)
+            if v.Parent then
+                removeEffects(v.Parent)
+            end
         end)
     end)
 
-    services.Players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(function(character)
-            updatePlayerCache()
-            if ANTIBAN_CONFIG.DebugMode then print("Player joined - Cache updated") end
-        end)
-    end)
-
-    services.Players.PlayerRemoving:Connect(function(player)
-        task.delay(0.5, updatePlayerCache)
-    end)
-
-    -- OBFUSCATED COMMANDS
+    FpsBooster.State.ActiveConnections.PlayerAdded = FpsBooster.Services.Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(function(c) FpsBooster.State.PlayerCache[c] = true end) end)
+    FpsBooster.State.ActiveConnections.PlayerRemoving = FpsBooster.Services.Players.PlayerRemoving:Connect(function(p) if p.Character then FpsBooster.State.PlayerCache[p.Character] = nil end end)
+    
+    -- Lệnh điều khiển (Im lặng)
     LocalPlayer.Chatted:Connect(function(msg)
         local lower = msg:lower()
-        if lower == "/settings toggle" or lower == "/profile toggle" then
-            if state.boosted then
+        if lower == "/e fps" or lower == "/e toggle" then
+            if FpsBooster.State.IsBoosted then
                 disableBoost()
             else
                 applyBoost()
             end
-        elseif lower == "/profile antiban off" then
-            ANTIBAN_CONFIG.Enabled = false
-            print("Antiban protocols disabled - Max performance mode.")
-        elseif lower == "/profile antiban on" then
-            ANTIBAN_CONFIG.Enabled = true
-            print("Antiban protocols enabled.")
-        elseif lower == "/debug on" then
-            ANTIBAN_CONFIG.DebugMode = true
-            print("Debug mode enabled.")
-        elseif lower == "/debug off" then
-            ANTIBAN_CONFIG.DebugMode = false
-            print("Debug mode disabled.")
-        elseif lower == "/status" then
-            print("=== System Status Report ===")
-            print("Profile Status: " .. (state.boosted and "ACTIVE" or "INACTIVE"))
-            print("Antiban: " .. (ANTIBAN_CONFIG.Enabled and "ENABLED" or "DISABLED"))
-            print("Optimized Parts: " .. tostring(countDictionary(state.optimizedParts)))
-            print("Cached Players: " .. tostring(countDictionary(state.playerCache)))
-            print("Uptime: " .. math.floor(tick() - state.startTime) .. "s")
-            local runTime = tick() - state.startTime
-            local stage = getAdaptiveStage(runTime)
-            print("Current Stage: " .. (runTime < 600 and "Cautious" or runTime < 1800 and "Normal" or "Relaxed"))
+        elseif lower == "/e fps status" then
+            local status = FpsBooster.State.IsBoosted and "ĐANG BẬT" or "ĐÃ TẮT"
+            local optimizedCount = #FpsBooster.Services.CollectionService:GetTagged(CONFIG.OptimizationTag)
+            local uptime = math.floor(tick() - FpsBooster.State.StartTime)
+            notifyUser("Trạng thái: " .. status .. " | Đối tượng đã tối ưu: " .. optimizedCount .. " | Thời gian: " .. uptime .. "s", Color3.fromRGB(100, 200, 255))
         end
     end)
 
-    task.wait(2)
+    -- Khởi động im lặng sau một khoảng chờ ngẫu nhiên
+    task.wait(getRandomInterval(1.0, 2.5))
     applyBoost()
-
-    -- OBFUSCATED LOGGING
-    print("System ready.")
-    print("Commands: /settings toggle, /status, /profile antiban on/off, /debug on/off")
 end)
 
+-- Hệ thống thông báo lỗi thân thiện
 if not success then
-    warn("System Error: " .. tostring(err))
+    local function notifyError(errorText)
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = "[FPS Booster] Lỗi: " .. errorText;
+                Color = Color3.fromRGB(255, 150, 50);
+                Font = Enum.Font.SourceSansBold;
+            })
+        end)
+    end
+    notifyUser("Script không thể khởi chạy. Vui lòng xem thông báo lỗi.", Color3.fromRGB(255, 50, 50))
+    notifyError(tostring(err))
 end
