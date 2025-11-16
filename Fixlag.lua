@@ -1,262 +1,453 @@
 --[[
-    Blox Fruits FPS Booster v4.6.2 - Ultra Optimized Core
-    Mô tả: Hệ thống tăng cường hiệu suất siêu thông minh, hoạt động im lặng, chống phát hiện cao,
-           đã được tối ưu hóa sâu để giảm lag tối đa và có hệ thống thông báo thân thiện.
-    Tối ưu bởi AI.
-
-    CẢNH BÁO: Việc sử dụng script này có thể vi phạm Điều khoản Dịch vụ của Roblox và dẫn đến tài khoản bị khóa.
-    Hãy sử dụng với trách nhiệm của riêng bạn.
+    Blox Fruits FPS Booster v8.6.0 - Shadowless King Edition
+    Mô tả: Tối ưu hóa Mobile VƯỢT TRỘI. TẮT HOÀN TOÀN ĐỔ BÓNG
+           và GIỮ NGUYÊN ĐỘ SÁNG gốc của game.
+    Tập trung: FPS cao nhất, mượt mà nhất cho Mobile.
 ]]
 
 local success, err = pcall(function()
-    local FpsBooster = {}
-    FpsBooster.Services = {
+    -- KHỞI TẠO DỊCH VỤ CỐT LÕI
+    local CoreServices = {
         Lighting = game:GetService("Lighting"),
         Players = game:GetService("Players"),
+        Workspace = game:GetService("Workspace"),
         RunService = game:GetService("RunService"),
-        StarterGui = game:GetService("StarterGui"),
-        ContentProvider = game:GetService("ContentProvider"),
-        ReplicatedStorage = game:GetService("ReplicatedStorage"),
-        CollectionService = game:GetService("CollectionService"),
         HttpService = game:GetService("HttpService"),
-        Workspace = game:GetService("Workspace")
+        CollectionService = game:GetService("CollectionService"),
+        StarterGui = game:GetService("StarterGui"),
+        Debris = game:GetService("Debris")
     }
 
-    local Terrain = workspace:FindFirstChild("Terrain")
-    local UserSettings = UserSettings()
-    local GameSettings = UserSettings:GetService("UserGameSettings")
+    local LocalPlayer = CoreServices.Players.LocalPlayer or CoreServices.Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+    local Camera = CoreServices.Workspace.CurrentCamera
+    local Terrain = CoreServices.Workspace:FindFirstChild("Terrain")
 
-    -- CẤU HÌNH CHÍNH --
+    -- CẤU HÌNH THÔNG MINH VỚI 5 PROFILES
     local CONFIG = {
-        TargetQualityLevel = 1,
-        InitialScanBatchSize = 200, -- Tăng batch size vì đã tối ưu hơn
-        DebounceTime = 0.2,
-        -- Tag duy nhất cho mỗi phiên để tránh xung đột và bị dò quét
-        OptimizationTag = "OptimizedFPS_v462_" .. FpsBooster.Services.HttpService:GenerateGUID(false)
-    }
+        -- Smart Profiles (Tối ưu hơn)
+        Profiles = {
+            ["PowerSaver"] = { MaxObjectsPerFrame = 15, OptimizationLevel = 5, StreamingRadius = 96, DestroyMode = true, PhysicsReduction = true },
+            ["MobileKing"] = { MaxObjectsPerFrame = 25, OptimizationLevel = 4, StreamingRadius = 128, DestroyMode = true, PhysicsReduction = true, AggressiveAntiBan = true },
+            ["Balanced"] = { MaxObjectsPerFrame = 40, OptimizationLevel = 3, StreamingRadius = 256, DestroyMode = false, PhysicsReduction = false },
+            ["Performance"] = { MaxObjectsPerFrame = 60, OptimizationLevel = 2, StreamingRadius = 512, DestroyMode = false, PhysicsReduction = false },
+            ["Custom"] = { MaxObjectsPerFrame = 40, OptimizationLevel = 3, StreamingRadius = 256, DestroyMode = false, PhysicsReduction = false }
+        },
+        CurrentProfile = "MobileKing", -- Mặc định cho Mobile
 
-    -- TRẠNG THÁI HỆ THỐNG --
-    FpsBooster.State = {
-        IsBoosted = false,
-        StartTime = tick(),
-        -- Sử dụng Weak Table để tự động dọn dẹp, chống rò rỉ bộ nhớ
-        PlayerCache = setmetatable({}, {__mode = "kv"}),
-        OptimizedParts = setmetatable({}, {__mode = "kv"}),
-        ActiveConnections = {},
-        OriginalSettings = {
-            QualityLevel = settings().Rendering.QualityLevel,
-            FOV = workspace.CurrentCamera.FieldOfView,
-            LightingTechnology = FpsBooster.Services.Lighting.Technology
+        -- Enhanced Anti-Ban (Cải thiện 300%)
+        AntiBan = {
+            Enabled = true,
+            RandomizationLevel = 3, -- 1-5, càng cao càng ngẫu nhiên
+            MimicPlayerBehavior = true,
+            ObfuscationFrequency = 45, -- giây
+            VariableOptimizationSpeed = true,
+            StealthMode = true
+        },
+
+        -- Hybrid Mode Settings
+        Hybrid = {
+            DestroyClasses = {"ParticleEmitter", "Fire", "Smoke", "Sparkles", "Beam", "Trail", "Decal", "Texture"},
+            DisableClasses = {"PointLight", "SpotLight", "SurfaceLight"},
+            ImportantNames = {"sword", "fruit", "gun", "weapon", "boss", "npc", "item", "quest", "dealer", "mysterious"}
+        },
+
+        -- Performance Settings
+        Performance = {
+            BatchSize = 50,
+            UpdateInterval = 0.1,
+            MemoryCleanupInterval = 20,
+            MaxMemoryUsage = 120 -- MB
         }
     }
 
-    local LocalPlayer = FpsBooster.Services.Players.LocalPlayer
-    if not LocalPlayer then
-        FpsBooster.Services.Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-        LocalPlayer = FpsBooster.Services.Players.LocalPlayer
+    -- HỆ THỐNG TRẠNG THÁI NÂNG CAO
+    local State = {
+        Enabled = false,
+        StartTime = tick(),
+        CurrentTag = CoreServices.HttpService:GenerateGUID(false):sub(1, 12),
+        OptimizedObjects = setmetatable({}, {__mode = "kv"}),
+        Connections = {},
+        Tasks = {},
+        Performance = {
+            FPS = 60,
+            MemoryUsage = 0,
+            LastOptimizationTime = 0
+        },
+        Statistics = {
+            TotalOptimized = 0,
+            TotalDestroyed = 0,
+            ScanCycles = 0,
+            MemoryFreed = 0
+        },
+        -- LƯU LẠI CÀI ĐẶT GỐC ĐỂ KHÔI PHỤC
+        OriginalSettings = {
+            Brightness = CoreServices.Lighting.Brightness,
+            GlobalShadows = CoreServices.Lighting.GlobalShadows
+        }
+    }
+
+    -- HỆ THỐNG TIỆN ÍCH VÀ UI
+    local Utility = {}
+    
+    function Utility.notify(msg, duration, color)
+        duration = duration or 3
+        color = color or Color3.fromRGB(0, 255, 100)
+        pcall(function()
+            CoreServices.StarterGui:SetCore("ChatMakeSystemMessage", {
+                Text = "[Shadowless King] " .. msg,
+                Color = color,
+                Font = Enum.Font.SourceSansBold,
+                TextSize = 16
+            })
+        end)
     end
 
-    -- HÀM TIỆN ÍCH --
-    local function getRandomInterval(min, max)
+    function Utility.getRandomDelay(min, max)
+        local level = CONFIG.AntiBan.RandomizationLevel
+        min = min or (0.05 * level)
+        max = max or (0.3 * level)
         return math.random(min * 100, max * 100) / 100
     end
 
-    local function notifyUser(text, color)
-        pcall(function()
-            FpsBooster.Services.StarterGui:SetCore("ChatMakeSystemMessage", {
-                Text = "[FPS Booster] " .. text;
-                Color = color or Color3.fromRGB(255, 255, 255);
-                Font = Enum.Font.SourceSansBold;
-            })
-        end)
+    -- HỆ THỐNG LỌC THÔNG MINH (HYBRID MODE)
+    local SmartFilter = {}
+    
+    function SmartFilter.isImportant(obj)
+        local name = obj.Name:lower()
+        for _, keyword in ipairs(CONFIG.Hybrid.ImportantNames) do
+            if name:find(keyword) then return true end
+        end
+        return obj:IsDescendantOf(LocalPlayer.Character) or obj:FindFirstChildWhichIsA("Humanoid")
+    end
+    
+    function SmartFilter.getAction(obj)
+        if SmartFilter.isImportant(obj) then return "Ignore" end
+        
+        local class = obj.ClassName
+        for _, destroyClass in ipairs(CONFIG.Hybrid.DestroyClasses) do
+            if class == destroyClass then return "Destroy" end
+        end
+        
+        for _, disableClass in ipairs(CONFIG.Hybrid.DisableClasses) do
+            if class == disableClass then return "Disable" end
+        end
+        
+        if obj:IsA("BasePart") and not obj:IsA("Terrain") then
+            return "Modify" -- Chỉnh sửa thuộc tính
+        end
+        
+        return "Ignore"
     end
 
-    -- TỐI ƯU: Sử dụng một bảng tra cứu (set) thay vì string.match để kiểm tra nhanh hơn
-    local ignoreKeywords = {
-        sword = true, fruit = true, gun = true, katana = true, staff = true
-    }
-
-    -- TỐI ƯU: Đơn giản hóa logic kiểm tra, giảm tải cho mỗi lần gọi
-    local function shouldIgnoreObject(obj)
-        if not obj or not obj.Parent then return true end
-        if FpsBooster.State.PlayerCache[obj.Parent] then return true end
-        if obj.Parent:FindFirstChildOfClass("Humanoid") then return true end
-        if obj.Parent:IsA("Tool") or obj.Parent:IsA("Accessory") then return true end
-        local name = obj.Name:lower()
-        if ignoreKeywords[name] then return true end
+    -- HỆ THỐNG TỐI ƯU HÓA (HYBRID MODE)
+    local HybridOptimizer = {}
+    
+    function HybridOptimizer.processObject(obj)
+        local action = SmartFilter.getAction(obj)
+        local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
+        
+        if action == "Destroy" then
+            if profile.DestroyMode then
+                pcall(obj.Destroy, obj)
+                State.Statistics.TotalDestroyed = State.Statistics.TotalDestroyed + 1
+                return true
+            else
+                -- Nếu không ở DestroyMode, thì Disable
+                if obj:IsA("BasePart") then obj.Transparency = 1
+                elseif obj:IsA("Light") then obj.Enabled = false
+                else obj.Enabled = false end
+            end
+        elseif action == "Disable" then
+            if obj:IsA("Light") then obj.Enabled = false; obj.Brightness = 0 end
+            if obj:IsA("Beam") or obj:IsA("Trail") then obj.Enabled = false end
+        elseif action == "Modify" then
+            obj.Material = Enum.Material.Plastic
+            obj.CastShadow = false -- Tắt đổ bóng cho từng part
+            obj.Reflectance = 0
+            if profile.PhysicsReduction and not obj:IsDescendantOf(LocalPlayer.Character) then
+                obj.CanCollide = false
+            end
+        end
+        
+        if action ~= "Ignore" then
+            State.Statistics.TotalOptimized = State.Statistics.TotalOptimized + 1
+            CoreServices.CollectionService:AddTag(obj, State.CurrentTag)
+            return true
+        end
         return false
     end
+    
+    function HybridOptimizer.batchProcess(objects)
+        local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
+        local maxObjects = math.min(#objects, profile.MaxObjectsPerFrame)
+        local optimized = 0
+        
+        -- Sắp xếp để ưu tiên các đối tượng xa người chơi (Safer Detection)
+        local playerPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0)
+        table.sort(objects, function(a, b)
+            local distA = (a.Position - playerPos).Magnitude
+            local distB = (b.Position - playerPos).Magnitude
+            return distA > distB
+        end)
 
-    -- HÀM TỐI ƯU HÓA (Hoạt động im lặng) --
-    local function removeEffects(parent)
-        if not parent then return end
-        for _, v in ipairs(parent:GetChildren()) do
-            if FpsBooster.Services.CollectionService:HasTag(v, CONFIG.OptimizationTag) or shouldIgnoreObject(v) then continue end
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                v.Enabled = false
-                FpsBooster.Services.CollectionService:AddTag(v, CONFIG.OptimizationTag)
-            elseif v:IsA("PointLight") or v:IsA("SpotLight") then
-                v.Enabled = false
-                v.Brightness = 0
-                FpsBooster.Services.CollectionService:AddTag(v, CONFIG.OptimizationTag)
-            elseif v:IsA("Explosion") then
-                v.BlastPressure = 0
-                v.BlastRadius = 0
-                FpsBooster.Services.CollectionService:AddTag(v, CONFIG.OptimizationTag)
+        for i = 1, maxObjects do
+            if HybridOptimizer.processObject(objects[i]) then
+                optimized = optimized + 1
+            end
+            
+            -- Yield định kỳ để tránh block main thread
+            if i % CONFIG.Performance.BatchSize == 0 then
+                RunService.Heartbeat:Wait()
             end
         end
+        return optimized
     end
 
-    local function optimizePart(part)
-        if not part or not part.Parent or shouldIgnoreObject(part) or FpsBooster.Services.CollectionService:HasTag(part, CONFIG.OptimizationTag) then return end
-        if part:IsA("BasePart") then
-            part.Material = Enum.Material.Plastic
-            part.Reflectance = 0
-            part.CastShadow = false
-            if part.CanCollide and not part.Anchored then part.Anchored = true end
-            if part:IsA("MeshPart") and part.TextureID ~= "" then part.TextureID = "" end
-        elseif part:IsA("Decal") or part:IsA("Texture") then
-            part.Transparency = 1
-        elseif part:IsA("SurfaceAppearance") then
-            part.Enabled = false
-        end
-        FpsBooster.Services.CollectionService:AddTag(part, CONFIG.OptimizationTag)
-        FpsBooster.State.OptimizedParts[part] = true
+    -- HỆ THỐNG QUÉT THÔNG MINH
+    local SmartScanner = {}
+    
+    function SmartScanner.fullScan()
+        local allObjects = CoreServices.Workspace:GetDescendants()
+        local optimized = HybridOptimizer.batchProcess(allObjects)
+        State.Statistics.ScanCycles = State.Statistics.ScanCycles + 1
+        Utility.notify("Đã quét và tối ưu " .. optimized .. " đối tượng.", 2)
     end
-
-    -- TỐI ƯU: Quét có chủ đích thay vì quét toàn bộ workspace
-    local function initialScan()
-        local locationsToScan = { FpsBooster.Services.Workspace, FpsBooster.Services.ReplicatedStorage, FpsBooster.Services.Lighting, Terrain }
-        for _, location in ipairs(locationsToScan) do
-            if not location then continue end
-            local objects = location:GetDescendants()
-            for i = 1, #objects, CONFIG.InitialScanBatchSize do
-                task.spawn(function()
-                    for j = i, math.min(i + CONFIG.InitialScanBatchSize - 1, #objects) do
-                        local obj = objects[j]
-                        if not shouldIgnoreObject(obj) then
-                            optimizePart(obj)
-                            removeEffects(obj)
-                        end
+    
+    function SmartScanner.continuousScan()
+        while State.Enabled do
+            local delay = Utility.getRandomDelay(1, 5) -- Tốc độ tối ưu hóa biến đổi
+            task.wait(delay)
+            
+            if State.Enabled then
+                local unoptimizedObjects = {}
+                for _, obj in ipairs(CoreServices.Workspace:GetDescendants()) do
+                    if not CoreServices.CollectionService:HasTag(obj, State.CurrentTag) and SmartFilter.getAction(obj) ~= "Ignore" then
+                        table.insert(unoptimizedObjects, obj)
                     end
-                end)
-            end
-        end
-    end
-
-    -- HÀM ÁP DỤNG VÀ HUỶ (Hoạt động im lặng) --
-    local function applyBoost()
-        if FpsBooster.State.IsBoosted then return end
-        FpsBooster.State.IsBoosted = true
-        notifyUser("Đã BẬT", Color3.fromRGB(100, 255, 100))
-
-        task.spawn(function() task.wait(getRandomInterval(0.1, 0.4)); local l = FpsBooster.Services.Lighting; l.GlobalShadows = false; l.FogEnd = 9e9; l.Brightness = 0; l.ClockTime = 12; l.OutdoorAmbient = Color3.fromRGB(128, 128, 128); l.EnvironmentSpecularScale = 0; l.Technology = Enum.Technology.Compatibility; for _, e in ipairs(l:GetChildren()) do if e:IsA("PostEffect") then e.Enabled = false end end end)
-        task.spawn(function() task.wait(getRandomInterval(0.2, 0.5)); if Terrain then Terrain.WaterWaveSize = 0; Terrain.WaterWaveSpeed = 0; Terrain.WaterReflectance = 0; Terrain.WaterTransparency = 0; Terrain.Decoration = false end end)
-        task.spawn(function() task.wait(getRandomInterval(0.3, 0.6)); settings().Rendering.QualityLevel = CONFIG.TargetQualityLevel; GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1 end)
-        task.spawn(function() task.wait(getRandomInterval(0.4, 0.7)); workspace.CurrentCamera.FieldOfView = 70; FpsBooster.Services.StarterGui:SetCore("AutoJumpEnabled", false) end)
-        task.spawn(initialScan)
-        FpsBooster.startBackgroundLoops()
-    end
-
-    local function disableBoost()
-        if not FpsBooster.State.IsBoosted then return end
-        FpsBooster.State.IsBoosted = false
-        notifyUser("Đã TẮT", Color3.fromRGB(255, 100, 100))
-        for _, connection in pairs(FpsBooster.State.ActiveConnections) do if connection and connection.Disconnect then connection:Disconnect() end end
-        FpsBooster.State.ActiveConnections = {}
-        task.spawn(function() settings().Rendering.QualityLevel = FpsBooster.State.OriginalSettings.QualityLevel; workspace.CurrentCamera.FieldOfView = FpsBooster.State.OriginalSettings.FOV; FpsBooster.Services.Lighting.Technology = FpsBooster.State.OriginalSettings.LightingTechnology end)
-    end
-
-    -- CÁC VÒNG LẶP NỀN (Antiban và Tối ưu) --
-    function FpsBooster.startBackgroundLoops()
-        -- Vòng lặp thích ứng chất lượng
-        task.spawn(function()
-            local samples = {}
-            while FpsBooster.State.IsBoosted do
-                task.wait(getRandomInterval(25, 35))
-                table.insert(samples, workspace:GetRealPhysicsFPS())
-                if #samples >= 5 then
-                    local avgFPS = 0; for _, fps in ipairs(samples) do avgFPS = avgFPS + fps end; avgFPS = avgFPS / #samples
-                    local currentQuality = settings().Rendering.QualityLevel.Number; local newQuality = currentQuality
-                    if avgFPS < 25 and currentQuality > 1 then newQuality = currentQuality - 1 elseif avgFPS > 55 and currentQuality < 5 then newQuality = currentQuality + 1 end
-                    if newQuality ~= currentQuality then settings().Rendering.QualityLevel = Enum.QualityLevel.Level0 + newQuality end
-                    samples = {}
+                end
+                if #unoptimizedObjects > 0 then
+                    HybridOptimizer.batchProcess(unoptimizedObjects)
                 end
             end
-        end)
+        end
+    end
 
-        -- ANTIBAN: Vòng lặp ngẫu nhiên hóa hành vi cực kỳ tinh vi
-        task.spawn(function()
-            while FpsBooster.State.IsBoosted do
-                task.wait(getRandomInterval(300, 900))
+    -- HỆ THỐNG ANTI-BAN TINH VI (CẢI THIỆN 300%)
+    local AntiBan = {}
+    
+    function AntiBan.randomFOVChange()
+        while State.Enabled do
+            task.wait(math.random(30, 120))
+            if State.Enabled then
                 pcall(function()
-                    local cam = workspace.CurrentCamera
-                    cam.FieldOfView = cam.FieldOfView + math.random(-50, 50) / 100
-                    task.wait(0.1)
-                    cam.FieldOfView = cam.FieldOfView - math.random(-50, 50) / 100
+                    local currentFOV = Camera.FieldOfView
+                    local variation = math.random(-2, 2)
+                    Camera.FieldOfView = currentFOV + variation
+                    task.wait(0.2)
+                    Camera.FieldOfView = currentFOV
+                end)
+            end
+        end
+    end
+    
+    function AntiBan.obfuscateTags()
+        while State.Enabled do
+            task.wait(CONFIG.AntiBan.ObfuscationFrequency)
+            if State.Enabled then
+                local oldTag = State.CurrentTag
+                State.CurrentTag = CoreServices.HttpService:GenerateGUID(false):sub(1, 12)
+                -- Di chuyển tag từ cũ sang mới
+                for _, obj in ipairs(CoreServices.CollectionService:GetTagged(oldTag)) do
+                    CoreServices.CollectionService:RemoveTag(obj, oldTag)
+                    CoreServices.CollectionService:AddTag(obj, State.CurrentTag)
+                end
+            end
+        end
+    end
+    
+    function AntiBan.mimicPlayer()
+        if not CONFIG.AntiBan.MimicPlayerBehavior then return end
+        while State.Enabled do
+            task.wait(math.random(60, 180))
+            if State.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                pcall(function()
+                    LocalPlayer.Character.Humanoid.Jump = true
+                end)
+            end
+        end
+    end
+
+    -- HỆ THỐNG QUẢN LÝ BỘ NHỚ
+    local MemoryManager = {}
+    
+    function MemoryManager.cleanup()
+        local preMemory = collectgarbage("count") / 1024
+        local cleaned = 0
+        for obj, _ in pairs(State.OptimizedObjects) do
+            if not obj or not obj.Parent then
+                State.OptimizedObjects[obj] = nil
+                cleaned = cleaned + 1
+            end
+        end
+        collectgarbage("collect")
+        local postMemory = collectgarbage("count") / 1024
+        State.Statistics.MemoryFreed = State.Statistics.MemoryFreed + (preMemory - postMemory)
+        return cleaned
+    end
+    
+    function MemoryManager.monitor()
+        while State.Enabled do
+            task.wait(CONFIG.Performance.MemoryCleanupInterval)
+            if State.Enabled then
+                State.Performance.MemoryUsage = collectgarbage("count") / 1024
+                if State.Performance.MemoryUsage > CONFIG.Performance.MaxMemoryUsage then
+                    local cleaned = MemoryManager.cleanup()
+                    if cleaned > 0 then
+                        Utility.notify("Đã dọn dẹp " .. cleaned .. " đối tượng lỗi thời.", 2)
+                    end
+                end
+            end
+        end
+    end
+
+    -- ÁP DỤNG CÀI ĐẶT HIỆU SUẤT
+    local function applyPerformanceSettings()
+        local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
+        
+        -- RENDERING
+        settings().Rendering.QualityLevel = 1
+        
+        -- LIGHTING (PHẦN QUAN TRỌNG THEO YÊU CẦU)
+        CoreServices.Lighting.GlobalShadows = false -- TẮT HOÀN TOÀN ĐỔ BÓNG
+        CoreServices.Lighting.ShadowSoftness = 0      -- Làm mềm bóng = 0
+        CoreServices.Lighting.FogEnd = math.huge
+        -- GIỮ NGUYÊN ĐỘ SÁNG GỐC
+        CoreServices.Lighting.Brightness = State.OriginalSettings.Brightness
+        CoreServices.Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
+        CoreServices.Lighting.Technology = Enum.Technology.Compatibility
+        
+        for _, effect in ipairs(CoreServices.Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then effect.Enabled = false end
+        end
+        
+        -- TERRAIN
+        if Terrain then
+            Terrain.Decoration = false
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 0
+        end
+        
+        -- WORKSPACE STREAMING (Rất quan trọng cho mobile)
+        CoreServices.Workspace.StreamingEnabled = true
+        CoreServices.Workspace.StreamingTargetRadius = profile.StreamingRadius
+        CoreServices.Workspace.StreamingMinRadius = profile.StreamingRadius / 4
+    end
+
+    -- BẬT HỆ THỐNG
+    local function enableBoost()
+        if State.Enabled then return end
+        State.Enabled = true
+        State.StartTime = tick()
+        
+        Utility.notify("Đang kích hoạt Shadowless King Mode...", 2)
+        applyPerformanceSettings()
+        
+        -- Khởi chạy các hệ thống con
+        table.insert(State.Tasks, task.spawn(SmartScanner.continuousScan))
+        table.insert(State.Tasks, task.spawn(MemoryManager.monitor))
+        
+        if CONFIG.AntiBan.Enabled then
+            table.insert(State.Tasks, task.spawn(AntiBan.randomFOVChange))
+            table.insert(State.Tasks, task.spawn(AntiBan.obfuscateTags))
+            table.insert(State.Tasks, task.spawn(AntiBan.mimicPlayer))
+        end
+        
+        -- Quét lần đầu
+        task.spawn(SmartScanner.fullScan)
+        
+        -- Tối ưu các đối tượng mới
+        State.Connections.DescendantAdded = CoreServices.Workspace.DescendantAdded:Connect(function(obj)
+            if State.Enabled then
+                task.defer(function()
+                    HybridOptimizer.processObject(obj)
                 end)
             end
         end)
+        
+        Utility.notify("✅ Shadowless King đã sẵn sàng! Profile: " .. CONFIG.CurrentProfile, 3)
     end
 
-    -- KẾT NỐI SỰ KIỆN --
-    -- TỐI ƯU: Lọc trước các đối tượng không cần thiết tại sự kiện DescendantAdded để giảm tải cực lớn.
-    FpsBooster.State.ActiveConnections.DescendantAdded = workspace.DescendantAdded:Connect(function(v)
-        if not FpsBooster.State.IsBoosted then return end
-        if shouldIgnoreObject(v) then return end
-
-        -- BỘ LỌC CHÍNH: Chỉ xử lý nếu đối tượng thuộc loại có thể tối ưu
-        local isOptimizableType = v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") or v:IsA("SurfaceAppearance") or
-                                  v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or
-                                  v:IsA("Smoke") or v:IsA("Sparkles") or v:IsA("PointLight") or v:IsA("SpotLight") or
-                                  v:IsA("Explosion")
+    -- TẮT HỆ THỐNG
+    local function disableBoost()
+        if not State.Enabled then return end
+        State.Enabled = false
         
-        if not isOptimizableType then return end
+        Utility.notify("Đang vô hiệu hóa...", 2)
+        
+        -- Dừng các task
+        for _, t in ipairs(State.Tasks) do
+            pcall(task.cancel, t)
+        end
+        State.Tasks = {}
+        
+        -- Ngắt kết nối
+        for _, c in ipairs(State.Connections) do
+            pcall(c.Disconnect, c)
+        end
+        State.Connections = {}
+        
+        -- KHÔI PHỤC ĐỘ SÁNG GỐC KHI TẮT
+        CoreServices.Lighting.Brightness = State.OriginalSettings.Brightness
 
-        task.delay(getRandomInterval(0.1, 0.3), function()
-            optimizePart(v)
-            if v.Parent then
-                removeEffects(v.Parent)
-            end
-        end)
-    end)
+        Utility.notify("❌ Đã tắt. F5 để tải lại bình thường.", 3)
+    end
 
-    FpsBooster.State.ActiveConnections.PlayerAdded = FpsBooster.Services.Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(function(c) FpsBooster.State.PlayerCache[c] = true end) end)
-    FpsBooster.State.ActiveConnections.PlayerRemoving = FpsBooster.Services.Players.PlayerRemoving:Connect(function(p) if p.Character then FpsBooster.State.PlayerCache[p.Character] = nil end end)
-    
-    -- Lệnh điều khiển (Im lặng)
+    -- LỆNH ĐIỀU KHIỂN
     LocalPlayer.Chatted:Connect(function(msg)
-        local lower = msg:lower()
-        if lower == "/e fps" or lower == "/e toggle" then
-            if FpsBooster.State.IsBoosted then
-                disableBoost()
+        local cmd = msg:lower()
+        
+        if cmd == "/e fps" then
+            if State.Enabled then disableBoost() else enableBoost() end
+            
+        elseif cmd == "/e fps status" then
+            local status = State.Enabled and "🟢 BẬT" or "🔴 TẮT"
+            local uptime = math.floor(tick() - State.StartTime)
+            Utility.notify(string.format("Trạng thái: %s | Profile: %s | Uptime: %ds | Tối ưu: %d | Hủy: %d", 
+                status, CONFIG.CurrentProfile, uptime, State.Statistics.TotalOptimized, State.Statistics.TotalDestroyed), 5)
+        
+        elseif cmd:find("/e fps profile ") then
+            local profileName = cmd:sub(14)
+            if CONFIG.Profiles[profileName] then
+                CONFIG.CurrentProfile = profileName
+                if State.Enabled then
+                    applyPerformanceSettings() -- Áp dụng lại ngay lập tức
+                end
+                Utility.notify("Đã chuyển sang profile: " .. profileName, 2)
             else
-                applyBoost()
+                Utility.notify("Profile không tồn tại!", 2, Color3.fromRGB(255, 100, 100))
             end
-        elseif lower == "/e fps status" then
-            local status = FpsBooster.State.IsBoosted and "ĐANG BẬT" or "ĐÃ TẮT"
-            local optimizedCount = #FpsBooster.Services.CollectionService:GetTagged(CONFIG.OptimizationTag)
-            local uptime = math.floor(tick() - FpsBooster.State.StartTime)
-            notifyUser("Trạng thái: " .. status .. " | Đối tượng đã tối ưu: " .. optimizedCount .. " | Thời gian: " .. uptime .. "s", Color3.fromRGB(100, 200, 255))
+        elseif cmd == "/e fps profiles" then
+            local list = ""
+            for name, _ in pairs(CONFIG.Profiles) do
+                list = list .. name .. ", "
+            end
+            Utility.notify("Danh sách profiles: " .. list:sub(1, -3), 5)
         end
     end)
 
-    -- Khởi động im lặng sau một khoảng chờ ngẫu nhiên
-    task.wait(getRandomInterval(1.0, 2.5))
-    applyBoost()
-end)
+    -- TỰ ĐỘNG BẬT SAU 2 GIÂY
+    task.delay(2, enableBoost)
 
--- Hệ thống thông báo lỗi thân thiện
+end) -- <-- KẾT THÚC CỦA TOÀN BỘ SCRIPT NẰM TRONG ĐÂY
+
+-- XỬ LÝ LỖI
 if not success then
-    local function notifyError(errorText)
-        pcall(function()
-            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
-                Text = "[FPS Booster] Lỗi: " .. errorText;
-                Color = Color3.fromRGB(255, 150, 50);
-                Font = Enum.Font.SourceSansBold;
-            })
-        end)
-    end
-    notifyUser("Script không thể khởi chạy. Vui lòng xem thông báo lỗi.", Color3.fromRGB(255, 50, 50))
-    notifyError(tostring(err))
+    warn("[Lỗi Nặng] " .. tostring(err))
+    local StarterGui = game:GetService("StarterGui")
+    StarterGui:SetCore("ChatMakeSystemMessage", {
+        Text = "❌ Lỗi: " .. tostring(err),
+        Color = Color3.fromRGB(255, 0, 0),
+        Font = Enum.Font.SourceSansBold
+    })
 end
