@@ -1,9 +1,9 @@
 --[[
-    Blox Fruits FPS Booster v8.7.0 - The Ultimate King (No-GUI Edition)
-    Mô tả: Phiên bản cuối cùng, kết hợp mọi sức mạnh của v6.0.1 và v8.6.0.
-    Khắc phục: Tất cả 20 nhược điểm của v8.6.0.
+    Blox Fruits FPS Booster v8.7.4 - The Ultimate King (Full Restore)
+    Mô tả: Phiên bản cuối cùng, kết hợp mọi sức mạnh.
+    Khắc phục: Lưu và khôi phục TOÀN BỘ cài đặt gốc của game.
     Đặc điểm: Không GUI, điều khiển hoàn toàn bằng lệnh chat.
-    Mục tiêu: FPS cao nhất, linh hoạt nhất, an toàn nhất trên mọi thiết bị.
+    Mục tiêu: FPS cao nhất, linh hoạt nhất, an toàn nhất, sạch sẽ nhất trên mọi thiết bị.
 ]]
 
 local success, err = pcall(function()
@@ -26,7 +26,7 @@ local success, err = pcall(function()
     local Camera = CoreServices.Workspace.CurrentCamera
     local Terrain = CoreServices.Workspace:FindFirstChild("Terrain")
 
-    -- CẤU HÌNH V8.7.0 - GIẢI QUYẾT TẤT CẢ
+    -- CẤU HÌNH V8.7.4 - GIẢI QUYẾT TẤT CẢ
     local CONFIG = {
         -- === SMART PROFILES + AUTO-DETECT ===
         Profiles = {
@@ -48,24 +48,18 @@ local success, err = pcall(function()
         -- === ENHANCED ANTI-BAN ===
         AntiBan = {
             Enabled = true,
-            MimicMouse = true, -- QUAY LẠI
-            StealthLevel = 2, -- 1-3 (CẤU HÌNH ĐƯỢC)
+            MimicMouse = true,
+            StealthLevel = 2,
             DynamicTagRotation = true
         },
 
         -- === ADVANCED PERFORMANCE ===
         Performance = {
-            -- LOD System (QUAY LẠI)
             LOD = { Enabled = true, Levels = 5, DistanceMultipliers = {1, 2, 4, 8, 16}, UpdateInterval = 1.0 },
-            -- AI Prediction (QUAY LẠI)
             Prediction = { Enabled = true, Window = 5, Accuracy = 0.8 },
-            -- Adaptive System (QUAY LẠI)
             Adaptive = { Enabled = true, Thresholds = {Low = 30, Mid = 45, High = 60} },
-            -- Dynamic Batch Size (QUAY LẠI)
             DynamicBatch = { Enabled = true, MinSize = 50, MaxSize = 500 },
-            -- Smart Debounce (QUAY LẠI)
             Debounce = { Enabled = true, MinDelay = 0.05, MaxDelay = 0.3 },
-            -- Memory Hysteresis (QUAY LẠI)
             MemoryHysteresis = 10 -- MB
         },
 
@@ -93,8 +87,41 @@ local success, err = pcall(function()
             TotalOptimized = 0, TotalDestroyed = 0, ScanCycles = 0, MemoryFreed = 0, LastReset = tick()
         },
         Adaptive = { SystemTier = "Auto", PerformanceTrend = "Stable", PredictiveOptimizations = 0 },
-        Settings = { VerboseLogging = false, DebugMode = false, AutoDetectDevice = true }
+        Settings = { VerboseLogging = false, DebugMode = false, AutoDetectDevice = true },
+        -- === LƯU LẠI TOÀN BỘ CÀI ĐẶT GỐC ===
+        OriginalSettings = {
+            Lighting = {
+                Brightness = CoreServices.Lighting.Brightness,
+                OutdoorAmbient = CoreServices.Lighting.OutdoorAmbient,
+                Technology = CoreServices.Lighting.Technology,
+                GlobalShadows = CoreServices.Lighting.GlobalShadows,
+                ShadowSoftness = CoreServices.Lighting.ShadowSoftness,
+                FogEnd = CoreServices.Lighting.FogEnd
+            },
+            Workspace = {
+                StreamingEnabled = CoreServices.Workspace.StreamingEnabled,
+                StreamingTargetRadius = CoreServices.Workspace.StreamingTargetRadius,
+                StreamingMinRadius = CoreServices.Workspace.StreamingMinRadius
+            },
+            Rendering = {
+                QualityLevel = settings().Rendering.QualityLevel
+            },
+            Terrain = Terrain and {
+                Decoration = Terrain.Decoration,
+                WaterWaveSize = Terrain.WaterWaveSize,
+                WaterReflectance = Terrain.WaterReflectance,
+                WaterTransparency = Terrain.WaterTransparency
+            } or nil,
+            PostEffects = {}
+        }
     }
+
+    -- Lưu lại trạng thái của các PostEffect
+    for _, effect in ipairs(CoreServices.Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") then
+            State.OriginalSettings.PostEffects[effect.Name] = effect.Enabled
+        end
+    end
 
     -- ==========================================
     -- HỆ THỐNG TIỆN ÍCH (KHÔNG GUI)
@@ -335,7 +362,8 @@ local success, err = pcall(function()
         settings().Rendering.QualityLevel = 1
         -- LIGHTING
         CoreServices.Lighting.GlobalShadows = false; CoreServices.Lighting.ShadowSoftness = 0
-        CoreServices.Lighting.FogEnd = math.huge; CoreServices.Lighting.Brightness = 2.5
+        CoreServices.Lighting.FogEnd = math.huge
+        CoreServices.Lighting.Brightness = State.OriginalSettings.Lighting.Brightness -- Giữ gốc
         CoreServices.Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
         CoreServices.Lighting.Technology = Enum.Technology.Compatibility
         for _, effect in ipairs(CoreServices.Lighting:GetChildren()) do if effect:IsA("PostEffect") then effect.Enabled = false end end
@@ -401,7 +429,35 @@ local success, err = pcall(function()
         Utility.notify("Đang vô hiệu hóa...", 2)
         for _, t in ipairs(State.Tasks) do pcall(task.cancel, t) end; State.Tasks = {}
         for _, c in ipairs(State.Connections) do pcall(c.Disconnect, c) end; State.Connections = {}
-        Utility.notify("❌ Đã tắt. F5 để tải lại bình thường.", 3)
+        
+        -- === KHÔI PHỤC TOÀN BỘ CÀI ĐẶT GỐC ===
+        pcall(function()
+            -- Restore Lighting
+            for prop, value in pairs(State.OriginalSettings.Lighting) do
+                CoreServices.Lighting[prop] = value
+            end
+            -- Restore Workspace
+            for prop, value in pairs(State.OriginalSettings.Workspace) do
+                CoreServices.Workspace[prop] = value
+            end
+            -- Restore Rendering
+            settings().Rendering.QualityLevel = State.OriginalSettings.Rendering.QualityLevel
+            -- Restore Terrain
+            if State.OriginalSettings.Terrain and Terrain then
+                for prop, value in pairs(State.OriginalSettings.Terrain) do
+                    Terrain[prop] = value
+                end
+            end
+            -- Restore PostEffects
+            for effectName, originalEnabled in pairs(State.OriginalSettings.PostEffects) do
+                local effect = CoreServices.Lighting:FindFirstChild(effectName)
+                if effect and effect:IsA("PostEffect") then
+                    effect.Enabled = originalEnabled
+                end
+            end
+        end)
+
+        Utility.notify("❌ Đã tắt. TOÀN BỘ cài đặt đã được khôi phục.", 3)
     end
 
     -- ==========================================
@@ -422,7 +478,6 @@ local success, err = pcall(function()
         elseif cmd == "/e fps profiles" then
             local list = ""; for name, _ in pairs(CONFIG.Profiles) do list = list .. name .. ", " end
             Utility.notify("Profiles: " .. list:sub(1, -3), 5)
-        -- === CÁC LỆNH MỚI ĐỂ KHẮC PHỤC NHƯỢC ĐIỂM ===
         elseif cmd == "/e fps advanced" then
             Utility.notify(string.format("Advanced: AvgFPS: %d | MinFPS: %d | MaxFPS: %d | FrameTime: %.3fms | MemPeak: %.1fMB | Predictions: %d",
                 math.floor(State.Performance.AverageFPS), State.Performance.MinFPS, State.Performance.MaxFPS, State.Performance.FrameTime * 1000, State.Performance.MemoryPeak, State.Adaptive.PredictiveOptimizations), 6)
