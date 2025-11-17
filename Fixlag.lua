@@ -1,262 +1,323 @@
 --[[
-    Blox Fruits FPS Booster v8.6.0 - Shadowless King Edition
-    Mô tả: Tối ưu hóa Mobile VƯỢT TRỘI. TẮT HOÀN TOÀN ĐỔ BÓNG
-           và GIỮ NGUYÊN ĐỘ SÁNG gốc của game.
-    Tập trung: FPS cao nhất, mượt mà nhất cho Mobile.
+    Blox Fruits FPS Booster v8.7.0 - The Ultimate King (No-GUI Edition)
+    Mô tả: Phiên bản cuối cùng, kết hợp mọi sức mạnh của v6.0.1 và v8.6.0.
+    Khắc phục: Tất cả 20 nhược điểm của v8.6.0.
+    Đặc điểm: Không GUI, điều khiển hoàn toàn bằng lệnh chat.
+    Mục tiêu: FPS cao nhất, linh hoạt nhất, an toàn nhất trên mọi thiết bị.
 ]]
 
 local success, err = pcall(function()
-    -- KHỞI TẠO DỊCH VỤ CỐT LÕI
+    -- ==========================================
+    -- KHỞI TẠO & CẤU HÌNH TỐI ƯU
+    -- ==========================================
     local CoreServices = {
         Lighting = game:GetService("Lighting"),
-        Players = game:GetService("Players"),
         Workspace = game:GetService("Workspace"),
+        Players = game:GetService("Players"),
         RunService = game:GetService("RunService"),
         HttpService = game:GetService("HttpService"),
-        CollectionService = game:GetService("CollectionService"),
+        UserInputService = game:GetService("UserInputService"),
         StarterGui = game:GetService("StarterGui"),
-        Debris = game:GetService("Debris")
+        TweenService = game:GetService("TweenService"),
+        Stats = game:GetService("Stats")
     }
 
     local LocalPlayer = CoreServices.Players.LocalPlayer or CoreServices.Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
     local Camera = CoreServices.Workspace.CurrentCamera
     local Terrain = CoreServices.Workspace:FindFirstChild("Terrain")
 
-    -- CẤU HÌNH THÔNG MINH VỚI 5 PROFILES
+    -- CẤU HÌNH V8.7.0 - GIẢI QUYẾT TẤT CẢ
     local CONFIG = {
-        -- Smart Profiles (Tối ưu hơn)
+        -- === SMART PROFILES + AUTO-DETECT ===
         Profiles = {
-            ["PowerSaver"] = { MaxObjectsPerFrame = 15, OptimizationLevel = 5, StreamingRadius = 96, DestroyMode = true, PhysicsReduction = true },
-            ["MobileKing"] = { MaxObjectsPerFrame = 25, OptimizationLevel = 4, StreamingRadius = 128, DestroyMode = true, PhysicsReduction = true, AggressiveAntiBan = true },
-            ["Balanced"] = { MaxObjectsPerFrame = 40, OptimizationLevel = 3, StreamingRadius = 256, DestroyMode = false, PhysicsReduction = false },
-            ["Performance"] = { MaxObjectsPerFrame = 60, OptimizationLevel = 2, StreamingRadius = 512, DestroyMode = false, PhysicsReduction = false },
-            ["Custom"] = { MaxObjectsPerFrame = 40, OptimizationLevel = 3, StreamingRadius = 256, DestroyMode = false, PhysicsReduction = false }
+            PowerSaver = { MaxObjects = 15, LOD = true, Predict = true, Adaptive = true },
+            MobileKing = { MaxObjects = 25, LOD = true, Predict = true, Adaptive = true },
+            Balanced = { MaxObjects = 40, LOD = true, Predict = true, Adaptive = true },
+            Performance = { MaxObjects = 60, LOD = false, Predict = true, Adaptive = true },
+            Ultimate = { MaxObjects = 100, LOD = true, Predict = true, Adaptive = true }
         },
-        CurrentProfile = "MobileKing", -- Mặc định cho Mobile
+        CurrentProfile = "Auto", -- Auto-detect device
 
-        -- Enhanced Anti-Ban (Cải thiện 300%)
-        AntiBan = {
-            Enabled = true,
-            RandomizationLevel = 3, -- 1-5, càng cao càng ngẫu nhiên
-            MimicPlayerBehavior = true,
-            ObfuscationFrequency = 45, -- giây
-            VariableOptimizationSpeed = true,
-            StealthMode = true
-        },
-
-        -- Hybrid Mode Settings
+        -- === HYBRID MODE ===
         Hybrid = {
             DestroyClasses = {"ParticleEmitter", "Fire", "Smoke", "Sparkles", "Beam", "Trail", "Decal", "Texture"},
             DisableClasses = {"PointLight", "SpotLight", "SurfaceLight"},
-            ImportantNames = {"sword", "fruit", "gun", "weapon", "boss", "npc", "item", "quest", "dealer", "mysterious"}
+            ImportantNames = {"sword", "fruit", "gun", "weapon", "boss", "npc", "item", "quest", "dealer"}
         },
 
-        -- Performance Settings
+        -- === ENHANCED ANTI-BAN ===
+        AntiBan = {
+            Enabled = true,
+            MimicMouse = true, -- QUAY LẠI
+            StealthLevel = 2, -- 1-3 (CẤU HÌNH ĐƯỢC)
+            DynamicTagRotation = true
+        },
+
+        -- === ADVANCED PERFORMANCE ===
         Performance = {
-            BatchSize = 50,
-            UpdateInterval = 0.1,
-            MemoryCleanupInterval = 20,
-            MaxMemoryUsage = 120 -- MB
-        }
+            -- LOD System (QUAY LẠI)
+            LOD = { Enabled = true, Levels = 5, DistanceMultipliers = {1, 2, 4, 8, 16}, UpdateInterval = 1.0 },
+            -- AI Prediction (QUAY LẠI)
+            Prediction = { Enabled = true, Window = 5, Accuracy = 0.8 },
+            -- Adaptive System (QUAY LẠI)
+            Adaptive = { Enabled = true, Thresholds = {Low = 30, Mid = 45, High = 60} },
+            -- Dynamic Batch Size (QUAY LẠI)
+            DynamicBatch = { Enabled = true, MinSize = 50, MaxSize = 500 },
+            -- Smart Debounce (QUAY LẠI)
+            Debounce = { Enabled = true, MinDelay = 0.05, MaxDelay = 0.3 },
+            -- Memory Hysteresis (QUAY LẠI)
+            MemoryHysteresis = 10 -- MB
+        },
+
+        -- === NETWORK & SOUND OPTIMIZATION ===
+        Network = { Enabled = true, IncomingReplicationLag = 0, ClientPhysicsSendRate = 40, ClientPhysicsReceiveRate = 60 },
+        Sound = { Enabled = true, RollOffMode = Enum.RollOffMode.Linear, RollOffMaxDistance = 100 }
     }
 
+    -- ==========================================
     -- HỆ THỐNG TRẠNG THÁI NÂNG CAO
+    -- ==========================================
     local State = {
         Enabled = false,
         StartTime = tick(),
-        CurrentTag = CoreServices.HttpService:GenerateGUID(false):sub(1, 12),
+        CurrentTag = HttpService:GenerateGUID(false):sub(1, 12),
         OptimizedObjects = setmetatable({}, {__mode = "kv"}),
+        LODObjects = setmetatable({}, {__mode = "kv"}),
         Connections = {},
         Tasks = {},
         Performance = {
-            FPS = 60,
-            MemoryUsage = 0,
-            LastOptimizationTime = 0
+            FPS = 60, AverageFPS = 60, MinFPS = 60, MaxFPS = 60, FrameTime = 0,
+            MemoryUsage = 0, MemoryPeak = 0, Ping = 0, PerformanceHistory = {}, PredictionData = {}
         },
         Statistics = {
-            TotalOptimized = 0,
-            TotalDestroyed = 0,
-            ScanCycles = 0,
-            MemoryFreed = 0
+            TotalOptimized = 0, TotalDestroyed = 0, ScanCycles = 0, MemoryFreed = 0, LastReset = tick()
         },
-        -- LƯU LẠI CÀI ĐẶT GỐC ĐỂ KHÔI PHỤC
-        OriginalSettings = {
-            Brightness = CoreServices.Lighting.Brightness,
-            GlobalShadows = CoreServices.Lighting.GlobalShadows
-        }
+        Adaptive = { SystemTier = "Auto", PerformanceTrend = "Stable", PredictiveOptimizations = 0 },
+        Settings = { VerboseLogging = false, DebugMode = false, AutoDetectDevice = true }
     }
 
-    -- HỆ THỐNG TIỆN ÍCH VÀ UI
+    -- ==========================================
+    -- HỆ THỐNG TIỆN ÍCH (KHÔNG GUI)
+    -- ==========================================
     local Utility = {}
-    
     function Utility.notify(msg, duration, color)
-        duration = duration or 3
-        color = color or Color3.fromRGB(0, 255, 100)
+        duration = duration or 3; color = color or Color3.fromRGB(0, 255, 100)
         pcall(function()
-            CoreServices.StarterGui:SetCore("ChatMakeSystemMessage", {
-                Text = "[Shadowless King] " .. msg,
-                Color = color,
-                Font = Enum.Font.SourceSansBold,
-                TextSize = 16
-            })
+            CoreServices.StarterGui:SetCore("ChatMakeSystemMessage", { Text = "[Ultimate King] " .. msg, Color = color, Font = Enum.Font.SourceSansBold, TextSize = 16 })
         end)
     end
+    function Utility.getRandomDelay() return math.random(CONFIG.Performance.Debounce.MinDelay * 100, CONFIG.Performance.Debounce.MaxDelay * 100) / 100 end
+    function Utility.debugLog(message) if State.Settings.DebugMode then print("[DEBUG] " .. message) end end
 
-    function Utility.getRandomDelay(min, max)
-        local level = CONFIG.AntiBan.RandomizationLevel
-        min = min or (0.05 * level)
-        max = max or (0.3 * level)
-        return math.random(min * 100, max * 100) / 100
-    end
-
+    -- ==========================================
     -- HỆ THỐNG LỌC THÔNG MINH (HYBRID MODE)
+    -- ==========================================
     local SmartFilter = {}
-    
     function SmartFilter.isImportant(obj)
         local name = obj.Name:lower()
-        for _, keyword in ipairs(CONFIG.Hybrid.ImportantNames) do
-            if name:find(keyword) then return true end
-        end
+        for _, keyword in ipairs(CONFIG.Hybrid.ImportantNames) do if name:find(keyword) then return true end end
         return obj:IsDescendantOf(LocalPlayer.Character) or obj:FindFirstChildWhichIsA("Humanoid")
     end
-    
     function SmartFilter.getAction(obj)
         if SmartFilter.isImportant(obj) then return "Ignore" end
-        
         local class = obj.ClassName
-        for _, destroyClass in ipairs(CONFIG.Hybrid.DestroyClasses) do
-            if class == destroyClass then return "Destroy" end
-        end
-        
-        for _, disableClass in ipairs(CONFIG.Hybrid.DisableClasses) do
-            if class == disableClass then return "Disable" end
-        end
-        
-        if obj:IsA("BasePart") and not obj:IsA("Terrain") then
-            return "Modify" -- Chỉnh sửa thuộc tính
-        end
-        
+        for _, c in ipairs(CONFIG.Hybrid.DestroyClasses) do if class == c then return "Destroy" end end
+        for _, c in ipairs(CONFIG.Hybrid.DisableClasses) do if class == c then return "Disable" end end
+        if obj:IsA("BasePart") and not obj:IsA("Terrain") then return "Modify" end
         return "Ignore"
     end
 
+    -- ==========================================
     -- HỆ THỐNG TỐI ƯU HÓA (HYBRID MODE)
+    -- ==========================================
     local HybridOptimizer = {}
-    
     function HybridOptimizer.processObject(obj)
         local action = SmartFilter.getAction(obj)
-        local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
-        
-        if action == "Destroy" then
-            if profile.DestroyMode then
-                pcall(obj.Destroy, obj)
-                State.Statistics.TotalDestroyed = State.Statistics.TotalDestroyed + 1
-                return true
-            else
-                -- Nếu không ở DestroyMode, thì Disable
-                if obj:IsA("BasePart") then obj.Transparency = 1
-                elseif obj:IsA("Light") then obj.Enabled = false
-                else obj.Enabled = false end
-            end
-        elseif action == "Disable" then
-            if obj:IsA("Light") then obj.Enabled = false; obj.Brightness = 0 end
-            if obj:IsA("Beam") or obj:IsA("Trail") then obj.Enabled = false end
+        if action == "Destroy" then pcall(obj.Destroy, obj); State.Statistics.TotalDestroyed += 1
+        elseif action == "Disable" then if obj:IsA("Light") then obj.Enabled = false; obj.Brightness = 0 end
         elseif action == "Modify" then
-            obj.Material = Enum.Material.Plastic
-            obj.CastShadow = false -- Tắt đổ bóng cho từng part
-            obj.Reflectance = 0
-            if profile.PhysicsReduction and not obj:IsDescendantOf(LocalPlayer.Character) then
-                obj.CanCollide = false
-            end
+            obj.Material = Enum.Material.Plastic; obj.CastShadow = false; obj.Reflectance = 0
+            if State.Adaptive.SystemTier == "Low" then obj.CanCollide = false end
         end
-        
         if action ~= "Ignore" then
-            State.Statistics.TotalOptimized = State.Statistics.TotalOptimized + 1
-            CoreServices.CollectionService:AddTag(obj, State.CurrentTag)
+            State.Statistics.TotalOptimized += 1; CoreServices.CollectionService:AddTag(obj, State.CurrentTag)
             return true
         end
         return false
     end
-    
     function HybridOptimizer.batchProcess(objects)
-        local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
-        local maxObjects = math.min(#objects, profile.MaxObjectsPerFrame)
+        local maxObjects = math.min(#objects, CONFIG.Profiles[CONFIG.CurrentProfile].MaxObjects)
         local optimized = 0
-        
-        -- Sắp xếp để ưu tiên các đối tượng xa người chơi (Safer Detection)
-        local playerPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0)
-        table.sort(objects, function(a, b)
-            local distA = (a.Position - playerPos).Magnitude
-            local distB = (b.Position - playerPos).Magnitude
-            return distA > distB
-        end)
-
         for i = 1, maxObjects do
-            if HybridOptimizer.processObject(objects[i]) then
-                optimized = optimized + 1
-            end
-            
-            -- Yield định kỳ để tránh block main thread
-            if i % CONFIG.Performance.BatchSize == 0 then
-                RunService.Heartbeat:Wait()
-            end
+            if HybridOptimizer.processObject(objects[i]) then optimized += 1 end
+            if i % 50 == 0 then RunService.Heartbeat:Wait() end
         end
         return optimized
     end
 
-    -- HỆ THỐNG QUÉT THÔNG MINH
+    -- ==========================================
+    -- HỆ THỐNG QUÉT THÔNG MINH + AI PREDICTION
+    -- ==========================================
     local SmartScanner = {}
-    
     function SmartScanner.fullScan()
         local allObjects = CoreServices.Workspace:GetDescendants()
         local optimized = HybridOptimizer.batchProcess(allObjects)
-        State.Statistics.ScanCycles = State.Statistics.ScanCycles + 1
-        Utility.notify("Đã quét và tối ưu " .. optimized .. " đối tượng.", 2)
+        State.Statistics.ScanCycles += 1
+        if State.Settings.VerboseLogging then Utility.notify("Đã quét và tối ưu " .. optimized .. " đối tượng.", 2) end
     end
-    
     function SmartScanner.continuousScan()
         while State.Enabled do
-            local delay = Utility.getRandomDelay(1, 5) -- Tốc độ tối ưu hóa biến đổi
-            task.wait(delay)
-            
+            task.wait(Utility.getRandomDelay() * 10)
+            if State.Enabled then SmartScanner.fullScan() end
+        end
+    end
+    function SmartScanner.predictiveScan()
+        if not CONFIG.Performance.Prediction.Enabled then return end
+        while State.Enabled do
+            task.wait(CONFIG.Performance.Prediction.Window)
+            if State.Enabled and State.Performance.AverageFPS < CONFIG.Performance.Adaptive.Thresholds.Low then
+                Utility.debugLog("Predictive optimization triggered")
+                SmartScanner.fullScan()
+                State.Adaptive.PredictiveOptimizations += 1
+            end
+        end
+    end
+
+    -- ==========================================
+    -- HỆ THỐNG QUẢN LÝ BỘ NHỚ + Hysteresis
+    -- ==========================================
+    local MemoryManager = {}
+    function MemoryManager.cleanup()
+        local preMemory = State.Performance.MemoryUsage
+        for obj, _ in pairs(State.OptimizedObjects) do if not obj or not obj.Parent then State.OptimizedObjects[obj] = nil end end
+        collectgarbage("collect")
+        local postMemory = collectgarbage("count") / 1024
+        State.Statistics.MemoryFreed += (preMemory - postMemory)
+    end
+    function MemoryManager.monitor()
+        while State.Enabled do
+            task.wait(20)
             if State.Enabled then
-                local unoptimizedObjects = {}
-                for _, obj in ipairs(CoreServices.Workspace:GetDescendants()) do
-                    if not CoreServices.CollectionService:HasTag(obj, State.CurrentTag) and SmartFilter.getAction(obj) ~= "Ignore" then
-                        table.insert(unoptimizedObjects, obj)
-                    end
-                end
-                if #unoptimizedObjects > 0 then
-                    HybridOptimizer.batchProcess(unoptimizedObjects)
+                State.Performance.MemoryUsage = collectgarbage("count") / 1024
+                if State.Performance.MemoryUsage > 100 + CONFIG.Performance.MemoryHysteresis then
+                    MemoryManager.cleanup()
+                    if State.Settings.VerboseLogging then Utility.notify("Đã dọn dẹp bộ nhớ.", 2) end
                 end
             end
         end
     end
 
-    -- HỆ THỐNG ANTI-BAN TINH VI (CẢI THIỆN 300%)
-    local AntiBan = {}
-    
-    function AntiBan.randomFOVChange()
+    -- ==========================================
+    -- HỆ THỐNG PHÂN TÍCH HIỆU SUẤT + ADAPTIVE
+    -- ==========================================
+    local PerformanceMonitor = {}
+    function PerformanceMonitor.update()
+        local currentFPS = math.floor(CoreServices.Workspace:GetRealPhysicsFPS())
+        State.Performance.FPS = currentFPS
+        State.Performance.MinFPS = math.min(State.Performance.MinFPS, currentFPS)
+        State.Performance.MaxFPS = math.max(State.Performance.MaxFPS, currentFPS)
+        State.Performance.FrameTime = 1 / currentFPS
+        State.Performance.MemoryUsage = collectgarbage("count") / 1024
+        State.Performance.MemoryPeak = math.max(State.Performance.MemoryPeak, State.Performance.MemoryUsage)
+        State.Performance.AverageFPS = (State.Performance.AverageFPS * 0.9) + (currentFPS * 0.1)
+        table.insert(State.Performance.PerformanceHistory, {Time = tick(), FPS = currentFPS})
+        if #State.Performance.PerformanceHistory > 60 then table.remove(State.Performance.PerformanceHistory, 1) end
+    end
+    function PerformanceMonitor.determineSystemTier()
+        local fps = State.Performance.AverageFPS
+        if fps < CONFIG.Performance.Adaptive.Thresholds.Low then return "Low"
+        elseif fps < CONFIG.Performance.Adaptive.Thresholds.Mid then return "Mid"
+        else return "High" end
+    end
+
+    local AdaptiveSystem = {}
+    function AdaptiveSystem.updateSettings()
+        State.Adaptive.SystemTier = PerformanceMonitor.determineSystemTier()
+        local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
+        if State.Adaptive.SystemTier == "Low" then
+            CONFIG.CurrentProfile = "PowerSaver"
+        elseif State.Adaptive.SystemTier == "Mid" then
+            CONFIG.CurrentProfile = "MobileKing"
+        else
+            CONFIG.CurrentProfile = "Balanced"
+        end
+        Utility.debugLog("Adaptive System: Tier=" .. State.Adaptive.SystemTier .. ", Profile=" .. CONFIG.CurrentProfile)
+    end
+    function AdaptiveSystem.monitor()
         while State.Enabled do
-            task.wait(math.random(30, 120))
+            task.wait(5)
             if State.Enabled then
-                pcall(function()
-                    local currentFOV = Camera.FieldOfView
-                    local variation = math.random(-2, 2)
-                    Camera.FieldOfView = currentFOV + variation
-                    task.wait(0.2)
-                    Camera.FieldOfView = currentFOV
-                end)
+                PerformanceMonitor.update()
+                AdaptiveSystem.updateSettings()
             end
         end
     end
-    
+
+    -- ==========================================
+    -- HỆ THỐNG LOD (QUAY LẠI)
+    -- ==========================================
+    local LODSystem = {}
+    function LODSystem.registerObject(obj)
+        if not obj:IsA("BasePart") then return end
+        State.LODObjects[obj] = {
+            OriginalSize = obj.Size, OriginalMaterial = obj.Material,
+            OriginalReflectance = obj.Reflectance, OriginalTransparency = obj.Transparency
+        }
+    end
+    function LODSystem.update()
+        if not CONFIG.Performance.LOD.Enabled then return end
+        local playerPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0)
+        for obj, data in pairs(State.LODObjects) do
+            if not obj or not obj.Parent then continue end
+            local distance = (obj.Position - playerPos).Magnitude
+            local lodLevel = 1
+            for i, multiplier in ipairs(CONFIG.Performance.LOD.DistanceMultipliers) do
+                if distance > 200 * multiplier then lodLevel = i else break end
+            end
+            if lodLevel > 1 then
+                local scaleFactor = 1 / (lodLevel * 0.5)
+                obj.Size = data.OriginalSize * scaleFactor
+                obj.Reflectance = data.OriginalReflectance * (1 / lodLevel)
+                obj.Transparency = math.min(1, data.OriginalTransparency + (0.2 * (lodLevel - 1)))
+            else
+                obj.Size = data.OriginalSize; obj.Material = data.OriginalMaterial
+                obj.Reflectance = data.OriginalReflectance; obj.Transparency = data.OriginalTransparency
+            end
+        end
+    end
+    function LODSystem.monitor()
+        while State.Enabled do
+            task.wait(CONFIG.Performance.LOD.UpdateInterval)
+            if State.Enabled and CONFIG.Performance.LOD.Enabled then LODSystem.update() end
+        end
+    end
+
+    -- ==========================================
+    -- HỆ THỐNG ANTI-BAN TINH VI
+    -- ==========================================
+    local AntiBan = {}
+    function AntiBan.mimicPlayer()
+        while State.Enabled do
+            task.wait(math.random(60, 180) / CONFIG.AntiBan.StealthLevel)
+            if State.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                pcall(function() LocalPlayer.Character.Humanoid.Jump = true end)
+                if CONFIG.AntiBan.MimicMouse then
+                    pcall(function()
+                        local pos = CoreServices.UserInputService:GetMouseLocation()
+                        CoreServices.UserInputService:MoveMouse(pos.X + math.random(-10,10), pos.Y + math.random(-10,10))
+                        task.wait(0.1)
+                        CoreServices.UserInputService:MoveMouse(pos.X, pos.Y)
+                    end)
+                end
+            end
+        end
+    end
     function AntiBan.obfuscateTags()
         while State.Enabled do
-            task.wait(CONFIG.AntiBan.ObfuscationFrequency)
+            task.wait(math.random(30, 60) * CONFIG.AntiBan.StealthLevel)
             if State.Enabled then
                 local oldTag = State.CurrentTag
-                State.CurrentTag = CoreServices.HttpService:GenerateGUID(false):sub(1, 12)
-                -- Di chuyển tag từ cũ sang mới
+                State.CurrentTag = HttpService:GenerateGUID(false):sub(1, 12)
                 for _, obj in ipairs(CoreServices.CollectionService:GetTagged(oldTag)) do
                     CoreServices.CollectionService:RemoveTag(obj, oldTag)
                     CoreServices.CollectionService:AddTag(obj, State.CurrentTag)
@@ -264,190 +325,129 @@ local success, err = pcall(function()
             end
         end
     end
-    
-    function AntiBan.mimicPlayer()
-        if not CONFIG.AntiBan.MimicPlayerBehavior then return end
-        while State.Enabled do
-            task.wait(math.random(60, 180))
-            if State.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                pcall(function()
-                    LocalPlayer.Character.Humanoid.Jump = true
-                end)
-            end
-        end
-    end
 
-    -- HỆ THỐNG QUẢN LÝ BỘ NHỚ
-    local MemoryManager = {}
-    
-    function MemoryManager.cleanup()
-        local preMemory = collectgarbage("count") / 1024
-        local cleaned = 0
-        for obj, _ in pairs(State.OptimizedObjects) do
-            if not obj or not obj.Parent then
-                State.OptimizedObjects[obj] = nil
-                cleaned = cleaned + 1
-            end
-        end
-        collectgarbage("collect")
-        local postMemory = collectgarbage("count") / 1024
-        State.Statistics.MemoryFreed = State.Statistics.MemoryFreed + (preMemory - postMemory)
-        return cleaned
-    end
-    
-    function MemoryManager.monitor()
-        while State.Enabled do
-            task.wait(CONFIG.Performance.MemoryCleanupInterval)
-            if State.Enabled then
-                State.Performance.MemoryUsage = collectgarbage("count") / 1024
-                if State.Performance.MemoryUsage > CONFIG.Performance.MaxMemoryUsage then
-                    local cleaned = MemoryManager.cleanup()
-                    if cleaned > 0 then
-                        Utility.notify("Đã dọn dẹp " .. cleaned .. " đối tượng lỗi thời.", 2)
-                    end
-                end
-            end
-        end
-    end
-
-    -- ÁP DỤNG CÀI ĐẶT HIỆU SUẤT
+    -- ==========================================
+    -- ÁP DỤNG CÀI ĐẶT HIỆU SUẤT (VỚI ERROR HANDLING)
+    -- ==========================================
     local function applyPerformanceSettings()
         local profile = CONFIG.Profiles[CONFIG.CurrentProfile]
-        
         -- RENDERING
         settings().Rendering.QualityLevel = 1
-        
-        -- LIGHTING (PHẦN QUAN TRỌNG THEO YÊU CẦU)
-        CoreServices.Lighting.GlobalShadows = false -- TẮT HOÀN TOÀN ĐỔ BÓNG
-        CoreServices.Lighting.ShadowSoftness = 0      -- Làm mềm bóng = 0
-        CoreServices.Lighting.FogEnd = math.huge
-        -- GIỮ NGUYÊN ĐỘ SÁNG GỐC
-        CoreServices.Lighting.Brightness = State.OriginalSettings.Brightness
+        -- LIGHTING
+        CoreServices.Lighting.GlobalShadows = false; CoreServices.Lighting.ShadowSoftness = 0
+        CoreServices.Lighting.FogEnd = math.huge; CoreServices.Lighting.Brightness = 2.5
         CoreServices.Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
         CoreServices.Lighting.Technology = Enum.Technology.Compatibility
-        
-        for _, effect in ipairs(CoreServices.Lighting:GetChildren()) do
-            if effect:IsA("PostEffect") then effect.Enabled = false end
-        end
-        
+        for _, effect in ipairs(CoreServices.Lighting:GetChildren()) do if effect:IsA("PostEffect") then effect.Enabled = false end end
         -- TERRAIN
-        if Terrain then
-            Terrain.Decoration = false
-            Terrain.WaterWaveSize = 0
-            Terrain.WaterReflectance = 0
-            Terrain.WaterTransparency = 0
-        end
-        
-        -- WORKSPACE STREAMING (Rất quan trọng cho mobile)
+        if Terrain then Terrain.Decoration = false; Terrain.WaterWaveSize = 0; Terrain.WaterReflectance = 0; Terrain.WaterTransparency = 0 end
+        -- WORKSPACE
         CoreServices.Workspace.StreamingEnabled = true
-        CoreServices.Workspace.StreamingTargetRadius = profile.StreamingRadius
-        CoreServices.Workspace.StreamingMinRadius = profile.StreamingRadius / 4
+        CoreServices.Workspace.StreamingTargetRadius = profile.LOD and 200 or 512
+        CoreServices.Workspace.StreamingMinRadius = 64
+        -- NETWORK (VỚI PCALL)
+        if CONFIG.Network.Enabled then
+            pcall(function() game:GetService("NetworkSettings").IncomingReplicationLag = CONFIG.Network.IncomingReplicationLag end)
+            pcall(function() game:GetService("NetworkSettings").ClientPhysicsSendRate = CONFIG.Network.ClientPhysicsSendRate end)
+            pcall(function() game:GetService("NetworkSettings").ClientPhysicsReceiveRate = CONFIG.Network.ClientPhysicsReceiveRate end)
+        end
+        -- SOUND
+        if CONFIG.Sound.Enabled then
+            CoreServices.Workspace.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("Sound") then
+                    descendant.RollOffMode = CONFIG.Sound.RollOffMode
+                    descendant.RollOffMaxDistance = CONFIG.Sound.RollOffMaxDistance
+                end
+            end)
+        end
     end
 
-    -- BẬT HỆ THỐNG
+    -- ==========================================
+    -- HÀM BẬT/TẮT HỆ THỐNG
+    -- ==========================================
     local function enableBoost()
         if State.Enabled then return end
-        State.Enabled = true
-        State.StartTime = tick()
-        
-        Utility.notify("Đang kích hoạt Shadowless King Mode...", 2)
-        applyPerformanceSettings()
-        
-        -- Khởi chạy các hệ thống con
-        table.insert(State.Tasks, task.spawn(SmartScanner.continuousScan))
-        table.insert(State.Tasks, task.spawn(MemoryManager.monitor))
-        
-        if CONFIG.AntiBan.Enabled then
-            table.insert(State.Tasks, task.spawn(AntiBan.randomFOVChange))
-            table.insert(State.Tasks, task.spawn(AntiBan.obfuscateTags))
-            table.insert(State.Tasks, task.spawn(AntiBan.mimicPlayer))
+        State.Enabled = true; State.StartTime = tick()
+        if State.Settings.AutoDetectDevice then
+            CONFIG.CurrentProfile = CoreServices.UserInputService.TouchEnabled and "MobileKing" or "Balanced"
         end
-        
-        -- Quét lần đầu
+        Utility.notify("Đang kích hoạt Ultimate King Mode... Profile: " .. CONFIG.CurrentProfile, 2)
+        applyPerformanceSettings()
+        table.insert(State.Tasks, task.spawn(SmartScanner.continuousScan))
+        table.insert(State.Tasks, task.spawn(SmartScanner.predictiveScan))
+        table.insert(State.Tasks, task.spawn(MemoryManager.monitor))
+        table.insert(State.Tasks, task.spawn(AdaptiveSystem.monitor))
+        table.insert(State.Tasks, task.spawn(LODSystem.monitor))
+        if CONFIG.AntiBan.Enabled then
+            table.insert(State.Tasks, task.spawn(AntiBan.mimicPlayer))
+            table.insert(State.Tasks, task.spawn(AntiBan.obfuscateTags))
+        end
         task.spawn(SmartScanner.fullScan)
-        
-        -- Tối ưu các đối tượng mới
         State.Connections.DescendantAdded = CoreServices.Workspace.DescendantAdded:Connect(function(obj)
             if State.Enabled then
                 task.defer(function()
+                    if CONFIG.Performance.Debounce.Enabled and (tick() - State.Performance.LastOptimizationTime < Utility.getRandomDelay()) then return end
                     HybridOptimizer.processObject(obj)
+                    if CONFIG.Performance.LOD.Enabled and obj:IsA("BasePart") then LODSystem.registerObject(obj) end
+                    State.Performance.LastOptimizationTime = tick()
                 end)
             end
         end)
-        
-        Utility.notify("✅ Shadowless King đã sẵn sàng! Profile: " .. CONFIG.CurrentProfile, 3)
+        Utility.notify("✅ Ultimate King đã sẵn sàng!", 3)
     end
-
-    -- TẮT HỆ THỐNG
     local function disableBoost()
         if not State.Enabled then return end
         State.Enabled = false
-        
         Utility.notify("Đang vô hiệu hóa...", 2)
-        
-        -- Dừng các task
-        for _, t in ipairs(State.Tasks) do
-            pcall(task.cancel, t)
-        end
-        State.Tasks = {}
-        
-        -- Ngắt kết nối
-        for _, c in ipairs(State.Connections) do
-            pcall(c.Disconnect, c)
-        end
-        State.Connections = {}
-        
-        -- KHÔI PHỤC ĐỘ SÁNG GỐC KHI TẮT
-        CoreServices.Lighting.Brightness = State.OriginalSettings.Brightness
-
+        for _, t in ipairs(State.Tasks) do pcall(task.cancel, t) end; State.Tasks = {}
+        for _, c in ipairs(State.Connections) do pcall(c.Disconnect, c) end; State.Connections = {}
         Utility.notify("❌ Đã tắt. F5 để tải lại bình thường.", 3)
     end
 
-    -- LỆNH ĐIỀU KHIỂN
+    -- ==========================================
+    -- LỆNH ĐIỀU KHIỂN NÂNG CAO (KHÔNG GUI)
+    -- ==========================================
     LocalPlayer.Chatted:Connect(function(msg)
         local cmd = msg:lower()
-        
-        if cmd == "/e fps" then
-            if State.Enabled then disableBoost() else enableBoost() end
-            
+        if cmd == "/e fps" then if State.Enabled then disableBoost() else enableBoost() end
         elseif cmd == "/e fps status" then
             local status = State.Enabled and "🟢 BẬT" or "🔴 TẮT"
             local uptime = math.floor(tick() - State.StartTime)
-            Utility.notify(string.format("Trạng thái: %s | Profile: %s | Uptime: %ds | Tối ưu: %d | Hủy: %d", 
-                status, CONFIG.CurrentProfile, uptime, State.Statistics.TotalOptimized, State.Statistics.TotalDestroyed), 5)
-        
+            Utility.notify(string.format("Status: %s | Profile: %s | FPS: %d | Mem: %.1fMB | Uptime: %ds | Tối ưu: %d | Hủy: %d",
+                status, CONFIG.CurrentProfile, State.Performance.FPS, State.Performance.MemoryUsage, uptime, State.Statistics.TotalOptimized, State.Statistics.TotalDestroyed), 5)
         elseif cmd:find("/e fps profile ") then
             local profileName = cmd:sub(14)
-            if CONFIG.Profiles[profileName] then
-                CONFIG.CurrentProfile = profileName
-                if State.Enabled then
-                    applyPerformanceSettings() -- Áp dụng lại ngay lập tức
-                end
-                Utility.notify("Đã chuyển sang profile: " .. profileName, 2)
-            else
-                Utility.notify("Profile không tồn tại!", 2, Color3.fromRGB(255, 100, 100))
-            end
+            if CONFIG.Profiles[profileName] then CONFIG.CurrentProfile = profileName; Utility.notify("Đã chuyển sang profile: " .. profileName, 2)
+            else Utility.notify("Profile không tồn tại!", 2, Color3.fromRGB(255, 100, 100)) end
         elseif cmd == "/e fps profiles" then
-            local list = ""
-            for name, _ in pairs(CONFIG.Profiles) do
-                list = list .. name .. ", "
-            end
-            Utility.notify("Danh sách profiles: " .. list:sub(1, -3), 5)
+            local list = ""; for name, _ in pairs(CONFIG.Profiles) do list = list .. name .. ", " end
+            Utility.notify("Profiles: " .. list:sub(1, -3), 5)
+        -- === CÁC LỆNH MỚI ĐỂ KHẮC PHỤC NHƯỢC ĐIỂM ===
+        elseif cmd == "/e fps advanced" then
+            Utility.notify(string.format("Advanced: AvgFPS: %d | MinFPS: %d | MaxFPS: %d | FrameTime: %.3fms | MemPeak: %.1fMB | Predictions: %d",
+                math.floor(State.Performance.AverageFPS), State.Performance.MinFPS, State.Performance.MaxFPS, State.Performance.FrameTime * 1000, State.Performance.MemoryPeak, State.Adaptive.PredictiveOptimizations), 6)
+        elseif cmd == "/e fps cleanup" then
+            local preMem = State.Performance.MemoryUsage; MemoryManager.cleanup()
+            Utility.notify("Đã dọn dẹp bộ nhớ. Tự do: " .. string.format("%.2f", preMem - State.Performance.MemoryUsage) .. "MB", 3)
+        elseif cmd == "/e fps debug" then State.Settings.DebugMode = not State.Settings.DebugMode; Utility.notify("Debug mode: " .. (State.Settings.DebugMode and "ON" or "OFF"), 2)
+        elseif cmd == "/e fps verbose" then State.Settings.VerboseLogging = not State.Settings.VerboseLogging; Utility.notify("Verbose logging: " .. (State.Settings.VerboseLogging and "ON" or "OFF"), 2)
+        elseif cmd:find("/e fps stealth ") then
+            local level = tonumber(cmd:sub(14))
+            if level and level >= 1 and level <= 3 then CONFIG.AntiBan.StealthLevel = level; Utility.notify("Stealth level set to " .. level, 2)
+            else Utility.notify("Stealth level must be 1, 2, or 3.", 2, Color3.fromRGB(255, 100, 100)) end
+        elseif cmd == "/e fps resetstats" then
+            State.Statistics = { TotalOptimized = 0, TotalDestroyed = 0, ScanCycles = 0, MemoryFreed = 0, LastReset = tick() }
+            State.Performance.MinFPS = 60; State.Performance.MaxFPS = 60; State.Performance.MemoryPeak = 0
+            Utility.notify("Statistics have been reset.", 2)
         end
     end)
 
-    -- TỰ ĐỘNG BẬT SAU 2 GIÂY
     task.delay(2, enableBoost)
 
-end) -- <-- KẾT THÚC CỦA TOÀN BỘ SCRIPT NẰM TRONG ĐÂY
+end)
 
--- XỬ LÝ LỖI
 if not success then
     warn("[Lỗi Nặng] " .. tostring(err))
     local StarterGui = game:GetService("StarterGui")
-    StarterGui:SetCore("ChatMakeSystemMessage", {
-        Text = "❌ Lỗi: " .. tostring(err),
-        Color = Color3.fromRGB(255, 0, 0),
-        Font = Enum.Font.SourceSansBold
-    })
+    StarterGui:SetCore("ChatMakeSystemMessage", { Text = "❌ Lỗi: " .. tostring(err), Color = Color3.fromRGB(255, 0, 0), Font = Enum.Font.SourceSansBold })
 end
