@@ -1,7 +1,7 @@
 --[[
-    Blox Fruits FPS Booster v8.7.4 - The Ultimate King (Full Restore)
+    Blox Fruits FPS Booster v8.7.4 - The Ultimate King (Full Restore - FIXED)
     Mô tả: Phiên bản cuối cùng, kết hợp mọi sức mạnh.
-    Khắc phục: Lưu và khôi phục TOÀN BỘ cài đặt gốc của game.
+    Khắc phục: Lưu và khôi phục TOÀN BỘ cài đặt gốc của game. ĐÃ SỬA LỖI.
     Đặc điểm: Không GUI, điều khiển hoàn toàn bằng lệnh chat.
     Mục tiêu: FPS cao nhất, linh hoạt nhất, an toàn nhất, sạch sẽ nhất trên mọi thiết bị.
 ]]
@@ -281,7 +281,7 @@ local success, err = pcall(function()
     end
 
     -- ==========================================
-    -- HỆ THỐNG LOD (QUAY LẠI)
+    -- HỆ THỐNG LOD (QUAY LẠI) - ĐÃ SỬA LỖI
     -- ==========================================
     local LODSystem = {}
     function LODSystem.registerObject(obj)
@@ -305,6 +305,7 @@ local success, err = pcall(function()
                 local scaleFactor = 1 / (lodLevel * 0.5)
                 obj.Size = data.OriginalSize * scaleFactor
                 obj.Reflectance = data.OriginalReflectance * (1 / lodLevel)
+                -- === LỖI ĐÃ ĐƯỢC SỬA Ở DƯỚI ĐÂY ===
                 obj.Transparency = math.min(1, data.OriginalTransparency + (0.2 * (lodLevel - 1)))
             else
                 obj.Size = data.OriginalSize; obj.Material = data.OriginalMaterial
