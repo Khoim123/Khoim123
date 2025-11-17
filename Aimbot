@@ -1,62 +1,92 @@
--- Services
+--[[
+    Fluent Aimbot Pro - Optimized Version
+    Features: Bug fixes, performance improvements, and better code structure.
+]]
+
+--==============================================================================
+-- Services & Libraries
+--==============================================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
+local Camera = workspace.CurrentCamera
 
 -- Load Fluent Library
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
+--==============================================================================
+-- Constants & Configuration
+--==============================================================================
+local CHARACTER_LOAD_WAIT = 0.5
+local UPDATE_FREQUENCY = 0 -- 0 means every frame, higher values are less frequent but less responsive. Heartbeat is best for this.
+
+--==============================================================================
 -- Variables
+--==============================================================================
 local player = Players.LocalPlayer
-local character
+local character = player.Character or player.CharacterAdded:Wait()
+local playerRoot = character:WaitForChild("HumanoidRootPart", CHARACTER_LOAD_WAIT)
+local playerHumanoid = character:WaitForChild("Humanoid", CHARACTER_LOAD_WAIT)
+
+-- Aimbot Settings
 local AimbotDistance = 50
 local Smoothness = 0.5
 local CharacterTilt = false
 local AimbotEnabled = false
-local SelectedPlayers = {}
+local SelectedPlayers = {} -- Stores UserId of selected targets
 local aimbotConnection
 
+--==============================================================================
+-- Core Functions
+--==============================================================================
+
 -- Character Management
-local function getCharacter()
-    return player.Character or player.CharacterAdded:Wait()
+local function onCharacterAdded(newChar)
+    character = newChar
+    -- Use WaitForChild for safety, preventing nil errors
+    playerRoot = newChar:WaitForChild("HumanoidRootPart", CHARACTER_LOAD_WAIT)
+    playerHumanoid = newChar:WaitForChild("Humanoid", CHARACTER_LOAD_WAIT)
 end
 
-task.spawn(function()
-    character = getCharacter()
-    player.CharacterAdded:Connect(function(newChar)
-        character = newChar
-        task.wait(0.5)
-    end)
-end)
+player.CharacterAdded:Connect(onCharacterAdded)
 
--- Core Functions
-local function calculateDistance(pos1, pos2)
-    return (pos1 - pos2).Magnitude
+-- Helper function to get the current character's root part and humanoid
+local function getPlayerParts()
+    if not character or not character.Parent then
+        character = player.Character
+        if not character then return nil, nil end
+    end
+    -- Cache these to avoid repeated FindFirstChild calls
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local hum = character:FindFirstChild("Humanoid")
+    return root, hum
 end
 
 local function isValidTarget(targetPlayer)
     if not targetPlayer or targetPlayer == player then return false end
+    -- If no players are selected, target everyone. Otherwise, target only selected players.
     return next(SelectedPlayers) == nil or SelectedPlayers[targetPlayer.UserId]
 end
 
 local function getNearestCharacter()
-    if not AimbotEnabled or not character then return nil end
+    if not AimbotEnabled then return nil end
     
-    local playerRoot = character:FindFirstChild("HumanoidRootPart")
-    if not playerRoot then return nil end
+    local playerRoot, playerHumanoid = getPlayerParts()
+    if not playerRoot or not playerHumanoid or playerHumanoid.Health <= 0 then return nil end
     
     local closestChar, shortestDist = nil, math.huge
+    local playerPosition = playerRoot.Position
     
     for _, targetPlayer in ipairs(Players:GetPlayers()) do
         if isValidTarget(targetPlayer) and targetPlayer.Character then
             local targetChar = targetPlayer.Character
-            local humanoid = targetChar:FindFirstChild("Humanoid")
+            local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
             local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
             
-            if targetRoot and humanoid and humanoid.Health > 0 then
-                local dist = calculateDistance(playerRoot.Position, targetRoot.Position)
+            if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
+                local dist = (playerPosition - targetRoot.Position).Magnitude
                 if dist < shortestDist and dist <= AimbotDistance then
                     shortestDist = dist
                     closestChar = targetChar
@@ -69,21 +99,31 @@ local function getNearestCharacter()
 end
 
 local function aimAtTarget(target)
-    if not character then return end
-    
-    local playerRoot = character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character:FindFirstChild("Humanoid")
-    if not humanoid or humanoid.Health <= 0 or not playerRoot then return end
+    local playerRoot, playerHumanoid = getPlayerParts()
+    if not playerRoot or not playerHumanoid or playerHumanoid.Health <= 0 then return end
     
     local targetRoot = target:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return end
     
     local targetPos = targetRoot.Position
-    local direction = CharacterTilt and (targetPos - playerRoot.Position).Unit 
-        or Vector3.new(targetPos.X - playerRoot.Position.X, 0, targetPos.Z - playerRoot.Position.Z).Unit
+    local lookAtPosition
     
-    local smoothedDir = playerRoot.CFrame.LookVector:Lerp(direction, Smoothness)
-    playerRoot.CFrame = CFrame.new(playerRoot.Position, playerRoot.Position + smoothedDir)
+    if CharacterTilt then
+        -- Aim at the center of the target's body
+        lookAtPosition = targetPos
+    else
+        -- Aim only on the X and Z axes (horizontal plane)
+        lookAtPosition = Vector3.new(targetPos.X, playerRoot.Position.Y, targetPos.Z)
+    end
+    
+    -- Calculate the desired CFrame
+    local goalCFrame = CFrame.new(playerRoot.Position, lookAtPosition)
+    
+    -- Apply smoothing using Lerp
+    local currentCFrame = playerRoot.CFrame
+    local smoothedCFrame = currentCFrame:Lerp(goalCFrame, Smoothness)
+    
+    playerRoot.CFrame = smoothedCFrame
 end
 
 local function toggleAimbot(state)
@@ -96,22 +136,17 @@ local function toggleAimbot(state)
     
     if state then
         aimbotConnection = RunService.Heartbeat:Connect(function()
-            pcall(function()
-                if character and character:FindFirstChild("HumanoidRootPart") then
-                    local humanoid = character:FindFirstChild("Humanoid")
-                    if humanoid and humanoid.Health > 0 then
-                        local nearestChar = getNearestCharacter()
-                        if nearestChar then
-                            aimAtTarget(nearestChar)
-                        end
-                    end
-                end
-            end)
+            local nearestChar = getNearestCharacter()
+            if nearestChar then
+                aimAtTarget(nearestChar)
+            end
         end)
     end
 end
 
--- Create Fluent Window
+--==============================================================================
+-- UI Creation & Management
+--==============================================================================
 local Window = Fluent:CreateWindow({
     Title = "Aimbot Pro",
     SubTitle = "Mobile Optimized",
@@ -122,7 +157,6 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Tabs
 local Tabs = {
     Main = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
     Players = Window:AddTab({ Title = "Người chơi", Icon = "users" }),
@@ -160,9 +194,9 @@ local DistanceSlider = Tabs.Main:AddSlider("AimbotDistance", {
 
 local SmoothnessSlider = Tabs.Main:AddSlider("Smoothness", {
     Title = "Độ mượt",
-    Description = "Tốc độ xoay camera",
+    Description = "Tốc độ xoay camera (cao hơn = mượt hơn)",
     Default = 0.5,
-    Min = 0.1,
+    Min = 0.05,
     Max = 1,
     Rounding = 2,
     Callback = function(value)
@@ -172,95 +206,59 @@ local SmoothnessSlider = Tabs.Main:AddSlider("Smoothness", {
 
 local TiltToggle = Tabs.Main:AddToggle("CharacterTilt", {
     Title = "Ngắm theo chiều dọc",
-    Description = "Bật để ngắm cả trục Y",
+    Description = "Bật để ngắm cả trục Y (lên/xuống)",
     Default = false,
     Callback = function(value)
         CharacterTilt = value
     end
 })
 
-Tabs.Main:AddParagraph({
-    Title = "Trạng thái",
-    Content = "Aimbot sẵn sàng sử dụng"
-})
-
 -- Players Tab
 local PlayersSection = Tabs.Players:AddSection("Quản lý mục tiêu")
 
 local PlayerList = Tabs.Players:AddParagraph({
-    Title = "Danh sách người chơi",
+    Title = "Trạng thái mục tiêu",
     Content = "Đang tải..."
 })
 
-local function updatePlayerList()
-    local playerCount = 0
+local function updatePlayerListStatus()
+    local playerCount = #Players:GetPlayers() - 1 -- Exclude self
     local selectedCount = 0
-    
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player then
-            playerCount = playerCount + 1
-            if SelectedPlayers[p.UserId] then
-                selectedCount = selectedCount + 1
-            end
-        end
+    for _ in pairs(SelectedPlayers) do
+        selectedCount = selectedCount + 1
     end
     
+    local statusText
+    if selectedCount == 0 then
+        statusText = "Chưa chọn mục tiêu cụ thể (Sẽ ngắm tất cả)"
+    else
+        statusText = string.format("Đã chọn %d mục tiêu", selectedCount)
+    end
+
     local content = string.format(
-        "Tổng số: %d người\nĐã chọn: %d người\n\n%s",
+        "Tổng số người chơi khác: %d\n%s",
         playerCount,
-        selectedCount,
-        selectedCount == 0 and "Ngắm tất cả người chơi" or "Chỉ ngắm người được chọn"
+        statusText
     )
     
     PlayerList:SetDesc(content)
 end
 
-Tabs.Players:AddButton({
-    Title = "Làm mới danh sách",
-    Description = "Cập nhật danh sách người chơi",
-    Callback = function()
-        updatePlayerList()
-        Fluent:Notify({
-            Title = "Làm mới",
-            Content = "Đã cập nhật danh sách người chơi",
-            Duration = 2
-        })
-    end
-})
-
-Tabs.Players:AddButton({
-    Title = "Bỏ chọn tất cả",
-    Description = "Xóa tất cả mục tiêu đã chọn",
-    Callback = function()
-        SelectedPlayers = {}
-        updatePlayerList()
-        Fluent:Notify({
-            Title = "Đã xóa",
-            Content = "Bỏ chọn tất cả người chơi",
-            Duration = 2
-        })
-    end
-})
-
 local PlayerDropdown = Tabs.Players:AddDropdown("PlayerSelector", {
     Title = "Chọn mục tiêu",
-    Description = "Chọn người chơi để nhắm đến",
+    Description = "Chọn người chơi để nhắm đến (Bỏ trống để ngắm tất cả)",
     Values = {},
     Multi = true,
     Default = {},
-    Callback = function(values)
+    Callback = function(values) -- 'values' is an array of selected names, e.g., {"Player1", "Player2"}
         SelectedPlayers = {}
-        for playerName, selected in pairs(values) do
-            if selected then
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p.Name == playerName then
-                        SelectedPlayers[p.UserId] = true
-                        break
-                    end
-                end
+        for _, playerName in ipairs(values) do
+            local targetPlayer = Players:FindFirstChild(playerName)
+            if targetPlayer then
+                SelectedPlayers[targetPlayer.UserId] = true
             end
         end
-        updatePlayerList()
+        updatePlayerListStatus()
     end
 })
 
@@ -274,6 +272,30 @@ local function refreshPlayerDropdown()
     PlayerDropdown:SetValues(playerNames)
 end
 
+Tabs.Players:AddButton({
+    Title = "Làm mới danh sách",
+    Description = "Cập nhật danh sách người chơi",
+    Callback = function()
+        refreshPlayerDropdown()
+        updatePlayerListStatus()
+        Fluent:Notify({ Title = "Làm mới", Content = "Đã cập nhật danh sách", Duration = 2 })
+    end
+})
+
+Tabs.Players:AddButton({
+    Title = "Bỏ chọn tất cả",
+    Description = "Xóa tất cả mục tiêu đã chọn",
+    Callback = function()
+        SelectedPlayers = {}
+        -- Important: Update the dropdown UI to reflect the change
+        PlayerDropdown:SetValues({})
+        refreshPlayerDropdown() -- Repopulate the dropdown
+        PlayerDropdown:SetValue({}) -- Clear the selection in the UI
+        updatePlayerListStatus()
+        Fluent:Notify({ Title = "Đã xóa", Content = "Bỏ chọn tất cả người chơi", Duration = 2 })
+    end
+})
+
 -- Settings Tab
 local SettingsSection = Tabs.Settings:AddSection("Cấu hình")
 
@@ -286,34 +308,28 @@ Tabs.Settings:AddButton({
         TiltToggle:SetValue(false)
         AimbotToggle:SetValue(false)
         SelectedPlayers = {}
-        updatePlayerList()
-        Fluent:Notify({
-            Title = "Reset",
-            Content = "Đã đặt lại tất cả cài đặt",
-            Duration = 3
-        })
+        refreshPlayerDropdown()
+        updatePlayerListStatus()
+        Fluent:Notify({ Title = "Reset", Content = "Đã đặt lại tất cả cài đặt", Duration = 3 })
     end
 })
 
 Tabs.Settings:AddParagraph({
     Title = "Thông tin",
-    Content = "Phiên bản: 2.0\nTối ưu cho Mobile\nHỗ trợ Fluent UI"
+    Content = "Phiên bản: 2.1 (Tối ưu)\nTối ưu cho Mobile\nHỗ trợ Fluent UI"
 })
 
--- Create Toggle Button (Always Visible)
+--==============================================================================
+-- Floating Toggle Button
+--==============================================================================
 local ToggleButton = Instance.new("ScreenGui")
 ToggleButton.Name = "AimbotToggle"
 ToggleButton.ResetOnSpawn = false
 ToggleButton.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-if gethui then
-    ToggleButton.Parent = gethui()
-elseif syn and syn.protect_gui then
-    syn.protect_gui(ToggleButton)
-    ToggleButton.Parent = CoreGui
-else
-    ToggleButton.Parent = CoreGui
-end
+-- GUI Protection
+local ParentGui = gethui or (syn and syn.protect_gui and function(gui) syn.protect_gui(gui) return CoreGui end) or function(gui) return CoreGui end
+ToggleButton.Parent = ParentGui(ToggleButton)
 
 local ToggleFrame = Instance.new("Frame")
 ToggleFrame.Size = UDim2.new(0, 55, 0, 55)
@@ -340,15 +356,14 @@ ToggleBtn.TextSize = 26
 ToggleBtn.Font = Enum.Font.GothamBold
 ToggleBtn.Parent = ToggleFrame
 
--- Dragging
-local dragging, dragInput, dragStart, startPos
+-- Dragging functionality
+local dragging, dragStart, startPos
 
 ToggleFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPos = ToggleFrame.Position
-        
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
@@ -377,34 +392,29 @@ ToggleBtn.MouseButton1Click:Connect(function()
     Window:Minimize()
     
     local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(ToggleFrame, tweenInfo, {
-        BackgroundColor3 = guiVisible and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(60, 60, 60)
-    })
-    tween:Play()
+    local targetColor = guiVisible and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(60, 60, 60)
+    TweenService:Create(ToggleFrame, tweenInfo, { BackgroundColor3 = targetColor }):Play()
 end)
+
+--==============================================================================
+-- Initialization & Event Connections
+--==============================================================================
 
 -- Auto Update Player List
-Players.PlayerAdded:Connect(function()
-    task.wait(0.5)
-    refreshPlayerDropdown()
-    updatePlayerList()
-end)
-
+Players.PlayerAdded:Connect(refreshPlayerDropdown)
 Players.PlayerRemoving:Connect(function(leftPlayer)
     SelectedPlayers[leftPlayer.UserId] = nil
-    refreshPlayerDropdown()
-    updatePlayerList()
+    updatePlayerListStatus()
 end)
 
--- Initialize
+-- Initial setup
 refreshPlayerDropdown()
-updatePlayerList()
+updatePlayerListStatus()
 
 Fluent:Notify({
     Title = "Aimbot Pro",
-    Content = "GUI đã tải thành công!",
+    Content = "GUI đã tải thành công! (Phiên bản tối ưu)",
     Duration = 4
 })
 
-warn("✅ Fluent Aimbot GUI loaded!")
-print("Features: Optimized code, Fluent UI, Mobile support")
+warn("✅ Fluent Aimbot GUI (Optimized) loaded!")
