@@ -20,6 +20,6 @@ Fluent:Notify({
 -- Fluent provides Lucide Icons, they are optional
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
-    Test = Window:Addtab({ Title = "Test" , Icon = "" }),
+    Test = Window:AddTab({ Title = "Test" , Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
