@@ -34,6 +34,8 @@ Fluent:Notify({
     Duration = 5 -- Set to nil to make the notification not disappear
 })
 
+local Section = Tabs.Main:AddSection("house")
+
 -- Thêm nút vào tab Main
 Tabs.Main:AddButton({
     Title = "Button",
