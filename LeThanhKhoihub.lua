@@ -30,14 +30,13 @@ Fluent:Notify({
 -- Fluent provides Lucide Icons, they are optional
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
+Tab:AddButton({
+    Title = "Button",
+    Description = "Very important button",
+    Callback = function()
+        print("Hello, world!")
+    end
+})
     Test = Window:AddTab({ Title = "Test" , Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
-
-Tab:AddButton({
-    Title = "Test",
-    Description = "Thử nghiệm",
-    Callback = function()
-        print("Thử nghiệm")
-    end
-})
