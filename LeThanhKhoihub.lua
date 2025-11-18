@@ -34,6 +34,7 @@ Fluent:Notify({
     Duration = 5 -- Set to nil to make the notification not disappear
 })
 
+-- Thêm nút vào tab Main
 Tabs.Main:AddButton({
     Title = "Button",
     Description = "Very important button",
@@ -41,10 +42,17 @@ Tabs.Main:AddButton({
         print("Hello, world!")
     end
 })
-Tab:AddButton({
-    Title = "Button 2",
+Tabs.Main:AddButton({
+    Title = "Test",
     Description = "Very important button",
     Callback = function()
-        print("Hello")
+        print("Hello Le Thanh Khoi")
+    end
+})
+Tabs.Main:AddButton({
+    Title = "Button 3",
+    Description = "Very important button",
+    Callback = function()
+        print("Thank you")
     end
 })
