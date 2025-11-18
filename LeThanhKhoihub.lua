@@ -33,3 +33,18 @@ Fluent:Notify({
     SubContent = "SubContent", -- Optional
     Duration = 5 -- Set to nil to make the notification not disappear
 })
+
+Tabs.Main:AddButton({
+    Title = "Button",
+    Description = "Very important button",
+    Callback = function()
+        print("Hello, world!")
+    end
+})
+Tab:AddButton({
+    Title = "Button 2",
+    Description = "Very important button",
+    Callback = function()
+        print("Hello")
+    end
+})
