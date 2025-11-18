@@ -1,7 +1,7 @@
 local Library = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Le Thanh Khoi hub " .. V1.0,
+    Title = "Le Thanh Khoi hub v1.0",
     SubTitle = "by Le Thanh Khoi",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
