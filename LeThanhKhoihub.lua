@@ -32,6 +32,7 @@ Fluent:Notify({
     Content = "Đã được load thành công",
     SubContent = "SubContent", -- Optional
     Duration = 5
+})
 
 -- Thêm các nút vào tab Main
 Tabs.Main:AddButton({
@@ -57,3 +58,38 @@ Tabs.Main:AddButton({
         print("Thank you")
     end
 })
+
+-- Tạo nút ẩn hiện GUI ở ngoài màn hình
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleButton = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Parent = game.CoreGui
+ScreenGui.Name = "ToggleGUI"
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+ToggleButton.Parent = ScreenGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ToggleButton.Position = UDim2.new(0, 10, 0.5, -25)
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Text = "☰"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 24
+ToggleButton.Active = true
+ToggleButton.Draggable = true
+
+UICorner.Parent = ToggleButton
+UICorner.CornerRadius = UDim.new(0, 10)
+
+-- Lấy GUI chính của Fluent
+task.wait(0.5) -- Đợi GUI load xong
+local MainGUI = game:GetService("CoreGui"):FindFirstChild("ScreenGui")
+local isVisible = true
+
+ToggleButton.MouseButton1Click:Connect(function()
+    isVisible = not isVisible
+    if MainGUI then
+        MainGUI.Enabled = isVisible
+    end
+end)
