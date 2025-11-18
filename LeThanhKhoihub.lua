@@ -1,5 +1,15 @@
 local Library = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
 local Window = Fluent:CreateWindow({
     Title = "Le Thanh Khoi hub v1.0",
     SubTitle = "by Le Thanh Khoi",
@@ -23,3 +33,11 @@ local Tabs = {
     Test = Window:AddTab({ Title = "Test" , Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
+
+Tab:AddButton({
+    Title = "Test",
+    Description = "Thử nghiệm",
+    Callback = function()
+        print("Thử nghiệm")
+    end
+})
