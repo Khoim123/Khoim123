@@ -14,9 +14,9 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl -- Used when theres no MinimizeKeybind
 })
 
--- Fluent provides Lucide Icons, they are optional
+-- Tabs
 local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "house" }),
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
     Test = Window:AddTab({ Title = "Test" , Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
@@ -31,11 +31,7 @@ Fluent:Notify({
     Title = "Le Thanh Khoi Hub",
     Content = "Đã được load thành công",
     SubContent = "SubContent", -- Optional
-    Duration = 5 -- Set to nil to make the notification not disappear
-})
-
--- Thêm Section vào tab Main
-local MainSection = Tabs.Main:AddSection("Main Features")
+    Duration = 5
 
 -- Thêm các nút vào tab Main
 Tabs.Main:AddButton({
