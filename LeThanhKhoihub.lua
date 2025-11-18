@@ -34,9 +34,10 @@ Fluent:Notify({
     Duration = 5 -- Set to nil to make the notification not disappear
 })
 
-local Section = Tabs.Main:AddSection("house")
+-- Thêm Section vào tab Main
+local MainSection = Tabs.Main:AddSection("Main Features")
 
--- Thêm nút vào tab Main
+-- Thêm các nút vào tab Main
 Tabs.Main:AddButton({
     Title = "Button",
     Description = "Very important button",
@@ -44,6 +45,7 @@ Tabs.Main:AddButton({
         print("Hello, world!")
     end
 })
+
 Tabs.Main:AddButton({
     Title = "Test",
     Description = "Very important button",
@@ -51,6 +53,7 @@ Tabs.Main:AddButton({
         print("Hello Le Thanh Khoi")
     end
 })
+
 Tabs.Main:AddButton({
     Title = "Button 3",
     Description = "Very important button",
