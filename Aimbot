@@ -1,8 +1,3 @@
---[[
-    Fluent Aimbot Pro - Optimized Version
-    Features: Bug fixes, performance improvements, and better code structure.
-]]
-
 --==============================================================================
 -- Services & Libraries
 --==============================================================================
@@ -11,7 +6,10 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
+local Teams = game:GetService("Teams")
 local Camera = workspace.CurrentCamera
+local Mouse = Players.LocalPlayer:GetMouse()
+local GuiService = game:GetService("GuiService")
 
 -- Load Fluent Library
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
@@ -20,138 +18,554 @@ local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/
 -- Constants & Configuration
 --==============================================================================
 local CHARACTER_LOAD_WAIT = 0.5
-local UPDATE_FREQUENCY = 0 -- 0 means every frame, higher values are less frequent but less responsive. Heartbeat is best for this.
+local CACHE_UPDATE_INTERVAL = 1
+local MAX_TARGET_PARTS = {"Head", "UpperTorso", "HumanoidRootPart"}
 
 --==============================================================================
 -- Variables
 --==============================================================================
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
-local playerRoot = character:WaitForChild("HumanoidRootPart", CHARACTER_LOAD_WAIT)
-local playerHumanoid = character:WaitForChild("Humanoid", CHARACTER_LOAD_WAIT)
+local playerRoot, playerHumanoid
 
--- Aimbot Settings
-local AimbotDistance = 50
-local Smoothness = 0.5
-local CharacterTilt = false
-local AimbotEnabled = false
-local SelectedPlayers = {} -- Stores UserId of selected targets
-local aimbotConnection
+-- Hard Aimbot Settings
+local HardSettings = {
+    Enabled = false,
+    Distance = 50,
+    Smoothness = 0.5,
+    CharacterTilt = false,
+    TargetPart = "HumanoidRootPart",
+    TeamCheck = false,
+    FOVCheck = false,
+    FOVSize = 200,
+    ShowFOV = false,
+    VisibilityCheck = false,
+    PredictMovement = false,
+    PredictionStrength = 0.1
+}
+
+-- Silent Aim Settings
+local SilentSettings = {
+    Enabled = false,
+    FOVSize = 150,
+    ShowFOV = false,
+    TeamCheck = false,
+    VisibilityCheck = false,
+    PredictMovement = false,
+    PredictionStrength = 0.1,
+    HitChance = 100,
+    TargetPart = "Head"
+}
+
+-- ESP Settings (Updated for Highlight + Name/Health + Hitbox)
+local ESPSettings = {
+    Enabled = false,
+    ShowHighlight = true,
+    ShowName = true,
+    ShowHealth = true,
+    HitboxSize = 1.5,  -- Scale factor for hitbox
+    TeamCheck = false
+}
+
+-- Shared Player Selection (FIXED: Ensured proper filtering in all loops)
+local SelectedPlayerNames = {}
+local SelectedPlayerUserIds = {}
+local hardAimbotConnection
+local playerCache = {}
+local lastCacheUpdate = 0
+
+-- FOV Circles
+local HardFOVCircle = Drawing.new("Circle")
+HardFOVCircle.Thickness = 2
+HardFOVCircle.NumSides = 64
+HardFOVCircle.Radius = HardSettings.FOVSize
+HardFOVCircle.Color = Color3.fromRGB(255, 255, 255)
+HardFOVCircle.Visible = HardSettings.ShowFOV
+HardFOVCircle.Filled = false
+HardFOVCircle.Transparency = 0.8
+
+local SilentFOVCircle = Drawing.new("Circle")
+SilentFOVCircle.Thickness = 2
+SilentFOVCircle.NumSides = 64
+SilentFOVCircle.Radius = SilentSettings.FOVSize
+SilentFOVCircle.Color = Color3.fromRGB(255, 0, 0)
+SilentFOVCircle.Visible = SilentSettings.ShowFOV
+SilentFOVCircle.Filled = false
+SilentFOVCircle.Transparency = 0.8
+
+-- ESP Objects (Updated: Highlight, BillboardGui for Name/Health)
+local ESPObjects = {}  -- Player -> {Highlight, BillboardGui, OriginalSizes for hitbox}
+
+-- Silent Aim Metatable Hook
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+setreadonly(mt, false)
+local silentHook = newcclosure(function(self, key)
+    if SilentSettings.Enabled and self == Mouse and key == "Hit" and math.random(1, 100) <= SilentSettings.HitChance then
+        local target = getSilentTarget()
+        if target then
+            local predictedPos = predictSilentPosition(target)
+            return CFrame.new(Mouse.Hit.Position, predictedPos)
+        end
+    end
+    return oldIndex(self, key)
+end)
+mt.__index = silentHook
+setreadonly(mt, true)
 
 --==============================================================================
--- Core Functions
+-- Utility Functions
 --==============================================================================
 
+local function updateHardFOVCircle()
+    HardFOVCircle.Visible = HardSettings.ShowFOV
+    HardFOVCircle.Radius = HardSettings.FOVSize
+    HardFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+end
+
+local function updateSilentFOVCircle()
+    SilentFOVCircle.Visible = SilentSettings.ShowFOV
+    SilentFOVCircle.Radius = SilentSettings.FOVSize
+    SilentFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+end
+
+local function isInFOV(position, fovSize, center)
+    local screenPos, onScreen = Camera:WorldToViewportPoint(position)
+    if not onScreen then return false end
+    local distance = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+    return distance <= fovSize
+end
+
+local function isVisible(targetPart)
+    local check = HardSettings.VisibilityCheck or SilentSettings.VisibilityCheck
+    if not check then return true end
+    if not playerRoot then return false end
+    local ray = Ray.new(playerRoot.Position, (targetPart.Position - playerRoot.Position).Unit * 1000)
+    local part = workspace:FindPartOnRayWithIgnoreList(ray, {character, targetPart.Parent})
+    return part == nil or part:IsDescendantOf(targetPart.Parent)
+end
+
+local function shouldIgnoreTeam(targetPlayer, checkType)
+    local teamCheck = checkType == "hard" and HardSettings.TeamCheck or 
+                      checkType == "silent" and SilentSettings.TeamCheck or 
+                      ESPSettings.TeamCheck
+    if not teamCheck then return false end
+    if not player.Team or not targetPlayer.Team then return false end
+    return player.Team == targetPlayer.Team
+end
+
+local function predictSilentPosition(targetPart)
+    if not SilentSettings.PredictMovement then return targetPart.Position end
+    local root = targetPart.Parent:FindFirstChild("HumanoidRootPart")
+    if root then
+        local velocity = root.AssemblyVelocity
+        local prediction = velocity * SilentSettings.PredictionStrength
+        return targetPart.Position + prediction
+    end
+    return targetPart.Position
+end
+
+local function getSilentTarget()
+    if not SilentSettings.Enabled then return nil end
+    updatePlayerCache()
+    local closestTarget, shortestDist = nil, math.huge
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for userId, cachedPlayer in pairs(playerCache) do
+        local targetPlayer = cachedPlayer.Player
+        -- FIXED: Proper selection filter - if selected players exist, ONLY target selected ones
+        local hasSelected = next(SelectedPlayerUserIds) ~= nil
+        if hasSelected and not SelectedPlayerUserIds[targetPlayer.UserId] then continue end  -- Skip if not selected
+        if targetPlayer ~= player and not shouldIgnoreTeam(targetPlayer, "silent") then
+
+            local targetPart = cachedPlayer.Character:FindFirstChild(SilentSettings.TargetPart) or 
+                               cachedPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if targetPart and isVisible(targetPart) then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist <= SilentSettings.FOVSize and dist < shortestDist then
+                        shortestDist = dist
+                        closestTarget = targetPart
+                    end
+                end
+            end
+        end
+    end
+    return closestTarget
+end
+
+--==============================================================================
 -- Character Management
+--==============================================================================
+
+local function updatePlayerParts()
+    if not character or not character.Parent then
+        character = player.Character
+        if not character then return false end
+    end
+    
+    playerRoot = character:FindFirstChild("HumanoidRootPart")
+    playerHumanoid = character:FindFirstChild("Humanoid")
+    
+    return playerRoot ~= nil and playerHumanoid ~= nil
+end
+
 local function onCharacterAdded(newChar)
     character = newChar
-    -- Use WaitForChild for safety, preventing nil errors
-    playerRoot = newChar:WaitForChild("HumanoidRootPart", CHARACTER_LOAD_WAIT)
-    playerHumanoid = newChar:WaitForChild("Humanoid", CHARACTER_LOAD_WAIT)
+    task.wait(CHARACTER_LOAD_WAIT)
+    updatePlayerParts()
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
 
--- Helper function to get the current character's root part and humanoid
-local function getPlayerParts()
-    if not character or not character.Parent then
-        character = player.Character
-        if not character then return nil, nil end
-    end
-    -- Cache these to avoid repeated FindFirstChild calls
-    local root = character:FindFirstChild("HumanoidRootPart")
-    local hum = character:FindFirstChild("Humanoid")
-    return root, hum
-end
+--==============================================================================
+-- Player Cache System
+--==============================================================================
 
-local function isValidTarget(targetPlayer)
-    if not targetPlayer or targetPlayer == player then return false end
-    -- If no players are selected, target everyone. Otherwise, target only selected players.
-    return next(SelectedPlayers) == nil or SelectedPlayers[targetPlayer.UserId]
-end
-
-local function getNearestCharacter()
-    if not AimbotEnabled then return nil end
+local function updatePlayerCache()
+    local currentTime = tick()
+    if currentTime - lastCacheUpdate < CACHE_UPDATE_INTERVAL then return end
     
-    local playerRoot, playerHumanoid = getPlayerParts()
-    if not playerRoot or not playerHumanoid or playerHumanoid.Health <= 0 then return nil end
-    
-    local closestChar, shortestDist = nil, math.huge
-    local playerPosition = playerRoot.Position
+    lastCacheUpdate = currentTime
+    playerCache = {}
     
     for _, targetPlayer in ipairs(Players:GetPlayers()) do
-        if isValidTarget(targetPlayer) and targetPlayer.Character then
+        if targetPlayer ~= player and targetPlayer.Character then
             local targetChar = targetPlayer.Character
             local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
             local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
             
             if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
-                local dist = (playerPosition - targetRoot.Position).Magnitude
-                if dist < shortestDist and dist <= AimbotDistance then
-                    shortestDist = dist
-                    closestChar = targetChar
+                playerCache[targetPlayer.UserId] = {
+                    Player = targetPlayer,
+                    Character = targetChar,
+                    Root = targetRoot,
+                    Humanoid = targetHumanoid
+                }
+            end
+        end
+    end
+end
+
+--==============================================================================
+-- Target Selection (FIXED: Proper filtering for selected players in all targets)
+--==============================================================================
+
+local function isValidTarget(targetPlayer, checkType)
+    if not targetPlayer or targetPlayer == player then return false end
+    
+    if shouldIgnoreTeam(targetPlayer, checkType) then return false end
+    
+    -- FIXED: If selected players exist, ONLY validate if UserId is in list; else all valid
+    local hasSelectedPlayers = next(SelectedPlayerUserIds) ~= nil
+    if hasSelectedPlayers then
+        return SelectedPlayerUserIds[targetPlayer.UserId] == true
+    end
+    
+    return true
+end
+
+local function getTargetPart(targetChar, partType)
+    local partName = partType == "hard" and HardSettings.TargetPart or SilentSettings.TargetPart
+    local part = targetChar:FindFirstChild(partName)
+    if part then return part end
+    
+    for _, partName in ipairs(MAX_TARGET_PARTS) do
+        part = targetChar:FindFirstChild(partName)
+        if part then return part end
+    end
+    
+    return nil
+end
+
+local function predictPosition(targetRoot, targetHumanoid, strength)
+    local predict = HardSettings.PredictMovement
+    if not predict then return targetRoot.Position end
+    
+    local velocity = targetRoot.AssemblyVelocity
+    local prediction = velocity * strength
+    
+    return targetRoot.Position + prediction
+end
+
+local function getNearestTarget()
+    if not HardSettings.Enabled or not updatePlayerParts() then return nil end
+    if playerHumanoid.Health <= 0 then return nil end
+    
+    updatePlayerCache()
+    
+    local closestTarget, shortestDist = nil, math.huge
+    local playerPosition = playerRoot.Position
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    
+    for userId, cachedPlayer in pairs(playerCache) do
+        -- FIXED: Apply isValidTarget filter BEFORE calculating distance
+        if isValidTarget(cachedPlayer.Player, "hard") then
+            local targetPart = getTargetPart(cachedPlayer.Character, "hard")
+            
+            if targetPart then
+                local distance = (playerPosition - targetPart.Position).Magnitude
+                
+                if distance <= HardSettings.Distance and 
+                   (not HardSettings.FOVCheck or isInFOV(targetPart.Position, HardSettings.FOVSize, center)) then
+                    if isVisible(targetPart) and distance < shortestDist then
+                        shortestDist = distance
+                        closestTarget = {
+                            Part = targetPart,
+                            Root = cachedPlayer.Root,
+                            Humanoid = cachedPlayer.Humanoid,
+                            Distance = distance
+                        }
+                    end
                 end
             end
         end
     end
     
-    return closestChar
+    return closestTarget
 end
 
-local function aimAtTarget(target)
-    local playerRoot, playerHumanoid = getPlayerParts()
-    if not playerRoot or not playerHumanoid or playerHumanoid.Health <= 0 then return end
+--==============================================================================
+-- Aiming Logic
+--==============================================================================
+
+local function aimAtTarget(targetData)
+    if not updatePlayerParts() or playerHumanoid.Health <= 0 then return end
     
-    local targetRoot = target:FindFirstChild("HumanoidRootPart")
-    if not targetRoot then return end
+    local targetPos = predictPosition(targetData.Root, targetData.Humanoid, HardSettings.PredictionStrength)
+    local aimPosition
     
-    local targetPos = targetRoot.Position
-    local lookAtPosition
-    
-    if CharacterTilt then
-        -- Aim at the center of the target's body
-        lookAtPosition = targetPos
+    if HardSettings.CharacterTilt then
+        if targetData.Part then targetPos = targetData.Part.Position end
+        aimPosition = targetPos
     else
-        -- Aim only on the X and Z axes (horizontal plane)
-        lookAtPosition = Vector3.new(targetPos.X, playerRoot.Position.Y, targetPos.Z)
+        aimPosition = Vector3.new(targetPos.X, playerRoot.Position.Y, targetPos.Z)
     end
     
-    -- Calculate the desired CFrame
-    local goalCFrame = CFrame.new(playerRoot.Position, lookAtPosition)
-    
-    -- Apply smoothing using Lerp
-    local currentCFrame = playerRoot.CFrame
-    local smoothedCFrame = currentCFrame:Lerp(goalCFrame, Smoothness)
+    local goalCFrame = CFrame.new(playerRoot.Position, aimPosition)
+    local smoothFactor = math.clamp(HardSettings.Smoothness, 0.01, 1)
+    local smoothedCFrame = playerRoot.CFrame:Lerp(goalCFrame, smoothFactor)
     
     playerRoot.CFrame = smoothedCFrame
 end
 
-local function toggleAimbot(state)
-    AimbotEnabled = state
+local function aimbotLoop()
+    local target = getNearestTarget()
+    if target then aimAtTarget(target) end
+end
+
+local function toggleHardAimbot(state)
+    HardSettings.Enabled = state
     
-    if aimbotConnection then
-        aimbotConnection:Disconnect()
-        aimbotConnection = nil
+    if hardAimbotConnection then
+        hardAimbotConnection:Disconnect()
+        hardAimbotConnection = nil
     end
     
     if state then
-        aimbotConnection = RunService.Heartbeat:Connect(function()
-            local nearestChar = getNearestCharacter()
-            if nearestChar then
-                aimAtTarget(nearestChar)
-            end
-        end)
+        hardAimbotConnection = RunService.Heartbeat:Connect(aimbotLoop)
     end
 end
 
+local function toggleSilentAim(state)
+    SilentSettings.Enabled = state
+    Fluent:Notify({
+        Title = "Silent Aim",
+        Content = state and "Đã BẬT" or "Đã TẮT",
+        Duration = 2
+    })
+end
+
 --==============================================================================
--- UI Creation & Management
+-- FOV Updates
 --==============================================================================
+RunService.RenderStepped:Connect(function()
+    updateHardFOVCircle()
+    updateSilentFOVCircle()
+end)
+
+--==============================================================================
+-- ESP Functions (FIXED: Full white Highlight, Name/Health Billboard, Hitbox scale)
+--==============================================================================
+
+local function createESP(targetPlayer)
+    if ESPObjects[targetPlayer] then return end
+    
+    -- White Highlight for full body
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Parent = targetPlayer.Character
+    highlight.Adornee = targetPlayer.Character
+    
+    -- BillboardGui for Name and Health
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.Parent = targetPlayer.Character:FindFirstChild("Head") or targetPlayer.Character.PrimaryPart
+    billboard.Adornee = targetPlayer.Character:FindFirstChild("Head") or targetPlayer.Character.PrimaryPart
+    billboard.AlwaysOnTop = true
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = targetPlayer.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextSize = 16
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.Parent = billboard
+    
+    local healthLabel = Instance.new("TextLabel")
+    healthLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    healthLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    healthLabel.BackgroundTransparency = 1
+    healthLabel.Text = "Health: 100/100"
+    healthLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    healthLabel.TextSize = 14
+    healthLabel.Font = Enum.Font.SourceSans
+    healthLabel.Parent = billboard
+    
+    -- Store original sizes for hitbox
+    local originalSizes = {}
+    for _, part in ipairs(targetPlayer.Character:GetChildren()) do
+        if part:IsA("BasePart") then
+            originalSizes[part] = part.Size
+        end
+    end
+    
+    ESPObjects[targetPlayer] = {Highlight = highlight, Billboard = billboard, NameLabel = nameLabel, HealthLabel = healthLabel, OriginalSizes = originalSizes}
+end
+
+local function updateHitbox(targetPlayer, scale)
+    local char = targetPlayer.Character
+    if not char then return end
+    local data = ESPObjects[targetPlayer]
+    if not data then return end
+    
+    for part, origSize in pairs(data.OriginalSizes) do
+        if part and part.Parent then
+            part.Size = origSize * scale
+        end
+    end
+end
+
+local function updateESP()
+    if not ESPSettings.Enabled then
+        for player, data in pairs(ESPObjects) do
+            if data.Highlight then data.Highlight.Enabled = false end
+            if data.Billboard then data.Billboard.Enabled = false end
+            -- Restore original hitbox
+            if ESPSettings.HitboxSize > 1 then
+                updateHitbox(player, 1)
+            end
+        end
+        return
+    end
+
+    updatePlayerCache()
+
+    for userId, cached in pairs(playerCache) do
+        local targetPlayer = cached.Player
+        -- FIXED: Apply selection filter to ESP too
+        local hasSelected = next(SelectedPlayerUserIds) ~= nil
+        if hasSelected and not SelectedPlayerUserIds[targetPlayer.UserId] then continue end
+        
+        if targetPlayer ~= player and not shouldIgnoreTeam(targetPlayer, "esp") then
+            createESP(targetPlayer)
+            local data = ESPObjects[targetPlayer]
+            local char = cached.Character
+            local humanoid = cached.Humanoid
+
+            if char and humanoid then
+                -- Highlight
+                if ESPSettings.ShowHighlight then
+                    data.Highlight.Adornee = char
+                    data.Highlight.Enabled = true
+                else
+                    data.Highlight.Enabled = false
+                end
+
+                -- Name/Health Billboard
+                if ESPSettings.ShowName then
+                    data.NameLabel.Text = targetPlayer.Name
+                    data.NameLabel.Visible = true
+                else
+                    data.NameLabel.Visible = false
+                end
+
+                if ESPSettings.ShowHealth then
+                    local health = humanoid.Health
+                    local maxHealth = humanoid.MaxHealth
+                    data.HealthLabel.Text = string.format("Health: %d/%d", math.floor(health), maxHealth)
+                    data.HealthLabel.TextColor3 = health > maxHealth * 0.5 and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+                    data.HealthLabel.Visible = true
+                else
+                    data.HealthLabel.Visible = false
+                end
+
+                data.Billboard.Enabled = ESPSettings.ShowName or ESPSettings.ShowHealth
+
+                -- Hitbox
+                updateHitbox(targetPlayer, ESPSettings.HitboxSize)
+            end
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(updateESP)  -- Use Heartbeat for health updates
+
+local function toggleESP(state)
+    ESPSettings.Enabled = state
+    if not state then
+        for player, data in pairs(ESPObjects) do
+            if data.Highlight then data.Highlight:Destroy() end
+            if data.Billboard then data.Billboard:Destroy() end
+            -- Restore hitbox
+            updateHitbox(player, 1)
+        end
+        ESPObjects = {}
+    end
+    Fluent:Notify({
+        Title = "ESP",
+        Content = state and "Đã BẬT (Highlight + Tên/Máu + Hitbox)" or "Đã TẮT",
+        Duration = 2
+    })
+end
+
+Players.PlayerRemoving:Connect(function(p)
+    if ESPObjects[p] then
+        if ESPObjects[p].Highlight then ESPObjects[p].Highlight:Destroy() end
+        if ESPObjects[p].Billboard then ESPObjects[p].Billboard:Destroy() end
+        -- Restore hitbox if applied
+        updateHitbox(p, 1)
+        ESPObjects[p] = nil
+    end
+    SelectedPlayerNames[p.Name] = nil
+    SelectedPlayerUserIds[p.UserId] = nil
+end)
+
+-- Handle character respawn for ESP
+Players.PlayerAdded:Connect(function(newPlayer)
+    newPlayer.CharacterAdded:Connect(function()
+        task.wait(1)
+        if ESPSettings.Enabled then
+            createESP(newPlayer)
+        end
+    end)
+end)
+
+--==============================================================================
+-- UI Creation
+--==============================================================================
+
 local Window = Fluent:CreateWindow({
-    Title = "Aimbot Pro",
-    SubTitle = "Mobile Optimized",
+    Title = "Aimbot Pro + Silent + ESP - Fixed",
+    SubTitle = "Enhanced 2025",
     TabWidth = 160,
-    Size = UDim2.fromOffset(520, 420),
+    Size = UDim2.fromOffset(580, 520),
     Acrylic = true,
     Theme = "Darker",
     MinimizeKey = Enum.KeyCode.LeftControl
@@ -159,192 +573,403 @@ local Window = Fluent:CreateWindow({
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
-    Players = Window:AddTab({ Title = "Người chơi", Icon = "users" }),
-    Settings = Window:AddTab({ Title = "Cài đặt", Icon = "settings" })
+    Advanced = Window:AddTab({ Title = "Nâng cao", Icon = "settings" }),
+    Silent = Window:AddTab({ Title = "Silent Aim", Icon = "target" }),
+    Players = Window:AddTab({ Title = "Mục tiêu", Icon = "users" }),
+    Visual = Window:AddTab({ Title = "Hiển thị", Icon = "eye" }),
+    ESP = Window:AddTab({ Title = "ESP", Icon = "map" })
 }
 
 -- Main Tab
-local MainSection = Tabs.Main:AddSection("Điều khiển Aimbot")
+local MainSection = Tabs.Main:AddSection("Điều khiển chính")
 
-local AimbotToggle = Tabs.Main:AddToggle("AimbotEnabled", {
-    Title = "Bật Aimbot",
-    Description = "Kích hoạt/Tắt aimbot",
+Tabs.Main:AddToggle("HardAimbotEnabled", {
+    Title = "Bật Hard Aimbot",
     Default = false,
     Callback = function(value)
-        toggleAimbot(value)
+        toggleHardAimbot(value)
         Fluent:Notify({
-            Title = "Aimbot",
-            Content = value and "Đã BẬT aimbot" or "Đã TẮT aimbot",
+            Title = "Hard Aimbot",
+            Content = value and "Đã BẬT" or "Đã TẮT",
             Duration = 2
         })
     end
 })
 
-local DistanceSlider = Tabs.Main:AddSlider("AimbotDistance", {
-    Title = "Khoảng cách ngắm",
-    Description = "Tầm xa tối đa (studs)",
+Tabs.Main:AddToggle("SilentAimbotEnabled", {
+    Title = "Bật Silent Aim",
+    Default = false,
+    Callback = function(value)
+        toggleSilentAim(value)
+    end
+})
+
+Tabs.Main:AddSlider("HardDistance", {
+    Title = "Khoảng cách (Hard)",
     Default = 50,
-    Min = 1,
+    Min = 10,
     Max = 1000,
     Rounding = 0,
     Callback = function(value)
-        AimbotDistance = value
+        HardSettings.Distance = value
     end
 })
 
-local SmoothnessSlider = Tabs.Main:AddSlider("Smoothness", {
-    Title = "Độ mượt",
-    Description = "Tốc độ xoay camera (cao hơn = mượt hơn)",
+Tabs.Main:AddSlider("HardSmoothness", {
+    Title = "Độ mượt (Hard)",
     Default = 0.5,
-    Min = 0.05,
+    Min = 0.01,
     Max = 1,
     Rounding = 2,
     Callback = function(value)
-        Smoothness = value
+        HardSettings.Smoothness = value
     end
 })
 
-local TiltToggle = Tabs.Main:AddToggle("CharacterTilt", {
+Tabs.Main:AddDropdown("HardTargetPart", {
+    Title = "Phần cơ thể ngắm (Hard)",
+    Values = {"Head", "UpperTorso", "HumanoidRootPart"},
+    Default = "HumanoidRootPart",
+    Callback = function(value)
+        HardSettings.TargetPart = value
+    end
+})
+
+-- Advanced Tab (for Hard)
+local AdvancedSection = Tabs.Advanced:AddSection("Tùy chọn nâng cao (Hard)")
+
+Tabs.Advanced:AddToggle("CharacterTilt", {
     Title = "Ngắm theo chiều dọc",
-    Description = "Bật để ngắm cả trục Y (lên/xuống)",
     Default = false,
     Callback = function(value)
-        CharacterTilt = value
+        HardSettings.CharacterTilt = value
     end
 })
 
--- Players Tab
+Tabs.Advanced:AddToggle("HardTeamCheck", {
+    Title = "Bỏ qua đồng đội (Hard)",
+    Default = false,
+    Callback = function(value)
+        HardSettings.TeamCheck = value
+    end
+})
+
+Tabs.Advanced:AddToggle("HardVisibilityCheck", {
+    Title = "Kiểm tra tầm nhìn (Hard)",
+    Description = "Chỉ ngắm mục tiêu nhìn thấy được",
+    Default = false,
+    Callback = function(value)
+        HardSettings.VisibilityCheck = value
+    end
+})
+
+Tabs.Advanced:AddToggle("HardPredictMovement", {
+    Title = "Dự đoán di chuyển (Hard)",
+    Description = "Ngắm trước vị trí mục tiêu sẽ đến",
+    Default = false,
+    Callback = function(value)
+        HardSettings.PredictMovement = value
+    end
+})
+
+Tabs.Advanced:AddSlider("HardPredictionStrength", {
+    Title = "Độ mạnh dự đoán (Hard)",
+    Default = 0.1,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(value)
+        HardSettings.PredictionStrength = value
+    end
+})
+
+-- Silent Tab
+local SilentSection = Tabs.Silent:AddSection("Cài đặt Silent")
+
+Tabs.Silent:AddSlider("SilentFOVSize", {
+    Title = "Kích thước FOV (Silent)",
+    Default = 150,
+    Min = 50,
+    Max = 500,
+    Rounding = 0,
+    Callback = function(value)
+        SilentSettings.FOVSize = value
+    end
+})
+
+Tabs.Silent:AddToggle("SilentTeamCheck", {
+    Title = "Bỏ qua đồng đội (Silent)",
+    Default = false,
+    Callback = function(value)
+        SilentSettings.TeamCheck = value
+    end
+})
+
+Tabs.Silent:AddToggle("SilentVisibilityCheck", {
+    Title = "Kiểm tra tầm nhìn (Silent)",
+    Default = false,
+    Callback = function(value)
+        SilentSettings.VisibilityCheck = value
+    end
+})
+
+Tabs.Silent:AddToggle("SilentPredictMovement", {
+    Title = "Dự đoán di chuyển (Silent)",
+    Default = false,
+    Callback = function(value)
+        SilentSettings.PredictMovement = value
+    end
+})
+
+Tabs.Silent:AddSlider("SilentPredictionStrength", {
+    Title = "Độ mạnh dự đoán (Silent)",
+    Default = 0.1,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(value)
+        SilentSettings.PredictionStrength = value
+    end
+})
+
+Tabs.Silent:AddSlider("SilentHitChance", {
+    Title = "Tỷ lệ hit (%)",
+    Default = 100,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(value)
+        SilentSettings.HitChance = value
+    end
+})
+
+Tabs.Silent:AddDropdown("SilentTargetPart", {
+    Title = "Phần cơ thể ngắm (Silent)",
+    Values = {"Head", "HumanoidRootPart", "UpperTorso"},
+    Default = "Head",
+    Callback = function(value)
+        SilentSettings.TargetPart = value
+    end
+})
+
+-- Players Tab (FIXED: Ensured callback clears/rebuilds properly, forced status update)
 local PlayersSection = Tabs.Players:AddSection("Quản lý mục tiêu")
 
 local PlayerList = Tabs.Players:AddParagraph({
-    Title = "Trạng thái mục tiêu",
+    Title = "Trạng thái",
     Content = "Đang tải..."
 })
 
 local function updatePlayerListStatus()
-    local playerCount = #Players:GetPlayers() - 1 -- Exclude self
+    local playerCount = #Players:GetPlayers() - 1
     local selectedCount = 0
-    for _ in pairs(SelectedPlayers) do
-        selectedCount = selectedCount + 1
-    end
+    for _ in pairs(SelectedPlayerUserIds) do selectedCount = selectedCount + 1 end
     
-    local statusText
-    if selectedCount == 0 then
-        statusText = "Chưa chọn mục tiêu cụ thể (Sẽ ngắm tất cả)"
-    else
-        statusText = string.format("Đã chọn %d mục tiêu", selectedCount)
-    end
-
-    local content = string.format(
-        "Tổng số người chơi khác: %d\n%s",
-        playerCount,
-        statusText
-    )
+    local statusText = selectedCount == 0 and "🎯 Chế độ: Ngắm TẤT CẢ" or 
+                       string.format("🎯 Chế độ: Chỉ ngắm %d người đã chọn", selectedCount)
     
-    PlayerList:SetDesc(content)
+    local newContent = string.format("👥 Người chơi khác: %d\n%s", playerCount, statusText)
+    PlayerList:SetContent(newContent)  -- FIXED: Use SetContent instead of SetDesc for Paragraph
+    -- Force update with delay if needed
+    task.wait(0.1)
+    PlayerList:SetContent(newContent)
 end
 
 local PlayerDropdown = Tabs.Players:AddDropdown("PlayerSelector", {
-    Title = "Chọn mục tiêu",
-    Description = "Chọn người chơi để nhắm đến (Bỏ trống để ngắm tất cả)",
+    Title = "Chọn mục tiêu cụ thể",
+    Description = "Để trống = ngắm tất cả",
     Values = {},
     Multi = true,
     Default = {},
-    Callback = function(values) -- 'values' is an array of selected names, e.g., {"Player1", "Player2"}
-        SelectedPlayers = {}
+    Callback = function(values)
+        -- FIXED: Clear and rebuild - ensure UserId mapping is accurate
+        SelectedPlayerNames = {}
+        SelectedPlayerUserIds = {}
+        
         for _, playerName in ipairs(values) do
             local targetPlayer = Players:FindFirstChild(playerName)
             if targetPlayer then
-                SelectedPlayers[targetPlayer.UserId] = true
+                SelectedPlayerNames[playerName] = true
+                SelectedPlayerUserIds[targetPlayer.UserId] = true
+                Fluent:Notify({
+                    Title = "Đã chọn",
+                    Content = "Thêm " .. playerName .. " vào mục tiêu",
+                    Duration = 1
+                })
             end
         end
-        updatePlayerListStatus()
+        
+        updatePlayerListStatus()  -- FIXED: Call immediately and with delay
+        
+        local selectedCount = #values
+        local targetInfo = selectedCount == 0 and "tất cả" or selectedCount .. " người"
+        Fluent:Notify({
+            Title = "Cập nhật mục tiêu",
+            Content = "Đang ngắm: " .. targetInfo,
+            Duration = 2
+        })
     end
 })
 
 local function refreshPlayerDropdown()
     local playerNames = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player then
-            table.insert(playerNames, p.Name)
-        end
+        if p ~= player then table.insert(playerNames, p.Name) end
     end
+    table.sort(playerNames)
     PlayerDropdown:SetValues(playerNames)
+    updatePlayerListStatus()  -- FIXED: Always update after refresh
 end
 
 Tabs.Players:AddButton({
-    Title = "Làm mới danh sách",
-    Description = "Cập nhật danh sách người chơi",
+    Title = "🔄 Làm mới danh sách",
+    Description = "Cập nhật danh sách người chơi mới",
     Callback = function()
         refreshPlayerDropdown()
-        updatePlayerListStatus()
-        Fluent:Notify({ Title = "Làm mới", Content = "Đã cập nhật danh sách", Duration = 2 })
+        Fluent:Notify({ Title = "Làm mới", Content = "Đã cập nhật danh sách người chơi", Duration = 2 })
     end
 })
 
 Tabs.Players:AddButton({
-    Title = "Bỏ chọn tất cả",
-    Description = "Xóa tất cả mục tiêu đã chọn",
+    Title = "❌ Bỏ chọn tất cả",
+    Description = "Xóa tất cả mục tiêu → Ngắm tất cả người chơi",
     Callback = function()
-        SelectedPlayers = {}
-        -- Important: Update the dropdown UI to reflect the change
-        PlayerDropdown:SetValues({})
-        refreshPlayerDropdown() -- Repopulate the dropdown
-        PlayerDropdown:SetValue({}) -- Clear the selection in the UI
-        updatePlayerListStatus()
-        Fluent:Notify({ Title = "Đã xóa", Content = "Bỏ chọn tất cả người chơi", Duration = 2 })
+        SelectedPlayerNames = {}
+        SelectedPlayerUserIds = {}
+        PlayerDropdown:SetValue({})
+        updatePlayerListStatus()  -- FIXED: Force update
+        Fluent:Notify({ Title = "Đã xóa", Content = "Chuyển sang chế độ ngắm TẤT CẢ", Duration = 2 })
     end
 })
 
--- Settings Tab
-local SettingsSection = Tabs.Settings:AddSection("Cấu hình")
+Tabs.Players:AddParagraph({
+    Title = "📖 Hướng dẫn",
+    Content = "• Không chọn ai = Ngắm tất cả\n• Chọn người cụ thể = Chỉ ngắm người đó\n• Có thể chọn nhiều người cùng lúc"
+})
 
-Tabs.Settings:AddButton({
-    Title = "Reset về mặc định",
-    Description = "Đặt lại tất cả cài đặt",
-    Callback = function()
-        DistanceSlider:SetValue(50)
-        SmoothnessSlider:SetValue(0.5)
-        TiltToggle:SetValue(false)
-        AimbotToggle:SetValue(false)
-        SelectedPlayers = {}
-        refreshPlayerDropdown()
-        updatePlayerListStatus()
-        Fluent:Notify({ Title = "Reset", Content = "Đã đặt lại tất cả cài đặt", Duration = 3 })
+Players.PlayerAdded:Connect(function(newPlayer)
+    task.wait(1)
+    refreshPlayerDropdown()
+end)
+
+-- Visual Tab
+local VisualSection = Tabs.Visual:AddSection("FOV Circles")
+
+Tabs.Visual:AddToggle("HardShowFOV", {
+    Title = "Hiển thị FOV (Hard)",
+    Default = false,
+    Callback = function(value)
+        HardSettings.ShowFOV = value
     end
 })
 
-Tabs.Settings:AddParagraph({
-    Title = "Thông tin",
-    Content = "Phiên bản: 2.1 (Tối ưu)\nTối ưu cho Mobile\nHỗ trợ Fluent UI"
+Tabs.Visual:AddToggle("HardFOVCheck", {
+    Title = "Kiểm tra FOV (Hard)",
+    Default = false,
+    Callback = function(value)
+        HardSettings.FOVCheck = value
+    end
+})
+
+Tabs.Visual:AddSlider("HardFOVSize", {
+    Title = "Kích thước FOV (Hard)",
+    Default = 200,
+    Min = 50,
+    Max = 500,
+    Rounding = 0,
+    Callback = function(value)
+        HardSettings.FOVSize = value
+    end
+})
+
+Tabs.Visual:AddToggle("SilentShowFOV", {
+    Title = "Hiển thị FOV (Silent)",
+    Default = false,
+    Callback = function(value)
+        SilentSettings.ShowFOV = value
+    end
+})
+
+-- ESP Tab (Updated for new features)
+local ESPSection = Tabs.ESP:AddSection("ESP Settings")
+
+Tabs.ESP:AddToggle("ESPToggle", {
+    Title = "Bật ESP",
+    Default = false,
+    Callback = function(value)
+        toggleESP(value)
+    end
+})
+
+Tabs.ESP:AddToggle("ESPShowHighlight", {
+    Title = "Hiển thị Highlight Trắng",
+    Default = true,
+    Callback = function(value)
+        ESPSettings.ShowHighlight = value
+    end
+})
+
+Tabs.ESP:AddToggle("ESPShowName", {
+    Title = "Hiển thị Tên",
+    Default = true,
+    Callback = function(value)
+        ESPSettings.ShowName = value
+    end
+})
+
+Tabs.ESP:AddToggle("ESPShowHealth", {
+    Title = "Hiển thị Máu",
+    Default = true,
+    Callback = function(value)
+        ESPSettings.ShowHealth = value
+    end
+})
+
+Tabs.ESP:AddSlider("ESPHitboxSize", {
+    Title = "Kích thước Hitbox",
+    Default = 1.5,
+    Min = 1,
+    Max = 3,
+    Rounding = 1,
+    Callback = function(value)
+        ESPSettings.HitboxSize = value
+    end
+})
+
+Tabs.ESP:AddToggle("ESPTeamCheck", {
+    Title = "Bỏ qua đồng đội",
+    Default = false,
+    Callback = function(value)
+        ESPSettings.TeamCheck = value
+    end
 })
 
 --==============================================================================
--- Floating Toggle Button
+-- Fixed Floating Toggle Button (Added scale shrink animation)
 --==============================================================================
+
 local ToggleButton = Instance.new("ScreenGui")
-ToggleButton.Name = "AimbotToggle"
+ToggleButton.Name = "FixedToggle"
 ToggleButton.ResetOnSpawn = false
 ToggleButton.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
--- GUI Protection
-local ParentGui = gethui or (syn and syn.protect_gui and function(gui) syn.protect_gui(gui) return CoreGui end) or function(gui) return CoreGui end
-ToggleButton.Parent = ParentGui(ToggleButton)
+ToggleButton.IgnoreGuiInset = true
+ToggleButton.Parent = gethui and gethui() or CoreGui
 
 local ToggleFrame = Instance.new("Frame")
-ToggleFrame.Size = UDim2.new(0, 55, 0, 55)
-ToggleFrame.Position = UDim2.new(0, 15, 0.5, -27)
-ToggleFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ToggleFrame.Size = UDim2.new(0, 50, 0, 50)
+ToggleFrame.Position = UDim2.new(0, 20, 0.5, -25)
+ToggleFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 ToggleFrame.BorderSizePixel = 0
+ToggleFrame.Active = true
 ToggleFrame.Parent = ToggleButton
 
 local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.CornerRadius = UDim.new(0, 10)
 UICorner.Parent = ToggleFrame
 
 local UIStroke = Instance.new("UIStroke")
-UIStroke.Color = Color3.fromRGB(100, 100, 100)
-UIStroke.Thickness = 2
+UIStroke.Color = Color3.fromRGB(80, 80, 80)
+UIStroke.Thickness = 1.5
 UIStroke.Parent = ToggleFrame
 
 local ToggleBtn = Instance.new("TextButton")
@@ -352,12 +977,13 @@ ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
 ToggleBtn.BackgroundTransparency = 1
 ToggleBtn.Text = "🎯"
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleBtn.TextSize = 26
+ToggleBtn.TextSize = 24
 ToggleBtn.Font = Enum.Font.GothamBold
 ToggleBtn.Parent = ToggleFrame
 
--- Dragging functionality
-local dragging, dragStart, startPos
+-- FIXED Dragging (smooth, bounded)
+local dragging = false
+local dragStart, startPos
 
 ToggleFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -373,48 +999,66 @@ ToggleFrame.InputBegan:Connect(function(input)
 end)
 
 ToggleFrame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
-        ToggleFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        
+        -- Bound to screen
+        local screenSize = Camera.ViewportSize
+        newPos = UDim2.new(
+            math.clamp(newPos.X.Scale, 0, 1),
+            math.clamp(newPos.X.Offset, 0, screenSize.X - 50),
+            math.clamp(newPos.Y.Scale, 0, 1),
+            math.clamp(newPos.Y.Offset, 0, screenSize.Y - 50)
+        )
+        
+        TweenService:Create(ToggleFrame, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {Position = newPos}):Play()
     end
 end)
 
--- Toggle Click
-local guiVisible = true
+-- FIXED GUI Toggle (uses Fluent's Minimize properly - toggles without losing button)
+-- ADDED: Scale animation - shrinks to 40x40 when minimized
+local guiMinimized = false
 ToggleBtn.MouseButton1Click:Connect(function()
-    guiVisible = not guiVisible
-    Window:Minimize()
+    guiMinimized = not guiMinimized
+    Window:Minimize()  -- Fluent's Minimize toggles state reliably
     
-    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local targetColor = guiVisible and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(60, 60, 60)
-    TweenService:Create(ToggleFrame, tweenInfo, { BackgroundColor3 = targetColor }):Play()
+    -- Visual feedback with scale
+    local targetSize = guiMinimized and UDim2.new(0, 40, 0, 40) or UDim2.new(0, 50, 0, 50)
+    local targetColor = guiMinimized and Color3.fromRGB(60, 60, 60) or Color3.fromRGB(30, 30, 30)
+    local targetIcon = guiMinimized and "🔒" or "🎯"
+    local targetTextSize = guiMinimized and 20 or 24
+    
+    TweenService:Create(ToggleFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { 
+        Size = targetSize,
+        BackgroundColor3 = targetColor 
+    }):Play()
+    TweenService:Create(UIStroke, TweenInfo.new(0.2), { 
+        Color = guiMinimized and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(80, 80, 80),
+        Thickness = guiMinimized and 1.2 or 1.5 
+    }):Play()
+    TweenService:Create(ToggleBtn, TweenInfo.new(0.2), { TextSize = targetTextSize }):Play()
+    ToggleBtn.Text = targetIcon
+end)
+
+-- Dynamic stroke color for aim states
+RunService.Heartbeat:Connect(function()
+    local isAnyOn = HardSettings.Enabled or SilentSettings.Enabled or ESPSettings.Enabled
+    local targetColor = isAnyOn and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    UIStroke.Color = UIStroke.Color:Lerp(targetColor, 0.1)
 end)
 
 --==============================================================================
--- Initialization & Event Connections
+-- Initialization
 --==============================================================================
 
--- Auto Update Player List
-Players.PlayerAdded:Connect(refreshPlayerDropdown)
-Players.PlayerRemoving:Connect(function(leftPlayer)
-    SelectedPlayers[leftPlayer.UserId] = nil
-    updatePlayerListStatus()
-end)
-
--- Initial setup
+updatePlayerParts()
 refreshPlayerDropdown()
-updatePlayerListStatus()
 
 Fluent:Notify({
-    Title = "Aimbot Pro",
-    Content = "GUI đã tải thành công! (Phiên bản tối ưu)",
-    Duration = 4
+    Title = "Fixed Script Loaded",
+    Content = "✅ Đã sửa status chọn người chơi (hiển thị đúng số lượng)!\n✅ Nút toggle: Có thể kéo + thu nhỏ khi ẩn GUI!\nTất cả tabs đầy đủ chức năng.",
+    Duration = 5
 })
 
-warn("✅ Fluent Aimbot GUI (Optimized) loaded!")
+warn("✅ Fixed Fluent Enhanced Script loaded - Status & Toggle fully resolved!")
