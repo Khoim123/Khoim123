@@ -1026,7 +1026,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
     -- Visual feedback with scale
     local targetSize = guiMinimized and UDim2.new(0, 40, 0, 40) or UDim2.new(0, 50, 0, 50)
     local targetColor = guiMinimized and Color3.fromRGB(60, 60, 60) or Color3.fromRGB(30, 30, 30)
-    local targetIcon = guiMinimized and "🔒" or "🎯"
+    local targetIcon = guiMinimized and "👑" or "👑"
     local targetTextSize = guiMinimized and 20 or 24
     
     TweenService:Create(ToggleFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { 
@@ -1056,9 +1056,7 @@ updatePlayerParts()
 refreshPlayerDropdown()
 
 Fluent:Notify({
-    Title = "Fixed Script Loaded",
-    Content = "✅ Đã sửa status chọn người chơi (hiển thị đúng số lượng)!\n✅ Nút toggle: Có thể kéo + thu nhỏ khi ẩn GUI!\nTất cả tabs đầy đủ chức năng.",
+    Title = "Script Loaded",
+    Content = "LethanhKhoi hub",
     Duration = 5
 })
-
-warn("✅ Fixed Fluent Enhanced Script loaded - Status & Toggle fully resolved!")
