@@ -1,40 +1,40 @@
-print("🔧 Khởi động Ultra Lag Fix Pro v3.1 (Fixed)...")
+-- =====================================================
+-- ==    ULTRA LAG FIX PRO v4.0 (REALME C11 EDITION)   ==
+-- ==    Tối ưu hóa cực mạnh, giữ map, làm đầu trong suốt ==
+-- =====================================================
+print("🔧 Khởi động Ultra Lag Fix Pro v4.0 (Realme C11 Edition)...")
 
+-- Lấy các service cần thiết
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local ContentProvider = game:GetService("ContentProvider")
 
 local Player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- ===== CẤU HÌNH ĐÃ SỬA (GIỮ MAP) =====
+-- ===== CẤU HÌNH TỐI ƯU SIÊU CẤP =====
 local Config = {
-    RenderDistance = 150,       -- TĂNG LÊN để thấy map (thay vì 60)
-    GraphicsQuality = 1,
+    RenderDistance = 120,       -- Giảm để tăng performance nhưng vẫn đủ thấy
     RemoveShadows = true,
     RemoveParticles = true,
-    RemoveDecals = false,       -- GIỮ decals quan trọng
-    RemoveTextures = false,     -- GIỮ textures để thấy map
+    RemoveDecals = true,        -- Xóa decals để tăng FPS
+    RemoveTextures = true,      -- Xóa texture của objects không phải map
     OptimizeTerrain = true,
     DisableAllEffects = true,
-    ReducePhysics = false,      -- KHÔNG xóa physics map
+    ReducePhysics = true,       -- Giảm physics cho objects nhỏ
     OptimizeAnimations = true,
-    ReduceGUI = false,
     DisableFog = true,
-    MaxFPS = 50,
+    MaxFPS = 60,                -- Giới hạn FPS để tiết kiệm pin
     AggressiveMemory = true,
-    DisableAudio = false,
-    SimplifyMeshes = false,     -- GIỮ meshes
-    ReduceParticleCount = true,
-    DisablePostProcessing = true,
+    DisableAudio = false,       -- Giữ âm thanh để có trải nghiệm tốt hơn
     LowPowerMode = true,
-    KeepMapVisible = true,      -- CỜ MỚI: giữ map
 }
 
 -- ===== DANH SÁCH PARTS QUAN TRỌNG (KHÔNG XÓA) =====
+-- Script sẽ bảo vệ các objects có tên chứa các từ khóa này
 local ImportantObjects = {
     "Terrain",
     "Baseplate",
@@ -45,7 +45,11 @@ local ImportantObjects = {
     "Floor",
     "Wall",
     "Ground",
-    "Platform"
+    "Platform",
+    "House",
+    "Tree",
+    "Road",
+    "Mountain"
 }
 
 -- ===== BIẾN TOÀN CỤC =====
@@ -62,74 +66,86 @@ local PerformanceStats = {
 local function SafeCall(func, ...)
     local success, result = pcall(func, ...)
     if not success then
-        warn("⚠️ Error:", result)
+        warn("⚠️ Lỗi:", result)
     end
     return success, result
 end
 
--- KIỂM TRA PART CÓ PHẢI MAP KHÔNG
+-- KIỂM TRA PART CÓ PHẢI MAP KHÔNG (CẢI TIẾN)
 local function IsMapPart(obj)
     if not obj or not obj.Parent then return false end
-    
-    -- Kiểm tra tên
-    for _, keyword in ipairs(ImportantObjects) do
-        if string.find(string.lower(obj.Name), string.lower(keyword)) then
-            return true
-        end
-    end
-    
-    -- Kiểm tra parent
-    if obj.Parent and obj.Parent.Name then
+
+    -- Kiểm tra tên object và parent
+    local function checkName(instance)
+        if not instance or not instance.Name then return false end
+        local lowerName = string.lower(instance.Name)
         for _, keyword in ipairs(ImportantObjects) do
-            if string.find(string.lower(obj.Parent.Name), string.lower(keyword)) then
+            if string.find(lowerName, string.lower(keyword)) then
                 return true
             end
         end
+        return false
     end
-    
-    -- Kiểm tra nếu là part cố định lớn (có thể là map)
-    if obj:IsA("BasePart") and obj.Anchored and obj.Size.Magnitude > 10 then
+
+    if checkName(obj) or checkName(obj.Parent) then
         return true
     end
-    
+
+    -- Kiểm tra nếu là part cố định lớn (có khả năng cao là map)
+    if obj:IsA("BasePart") and obj.Anchored and obj.Size.Magnitude > 15 then
+        return true
+    end
+
     return false
 end
 
--- ===== 1. ĐỒ HỌA CỰC THẤP =====
+-- ===== 1. ĐỒ HỌA CỰC THẤP (POTATO GRAPHICS) =====
 local function OptimizeGraphics()
-    print("📊 Tối ưu đồ họa...")
+    print("📊 Tối ưu đồ họa ở mức Potato...")
 
     SafeCall(function()
+        -- Đặt chất lượng đồ họa ở mức thấp nhất
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04 -- TĂNG để thấy map
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Low
         settings().Rendering.EditQualityLevel = Enum.QualityLevel.Level01
-
-        -- Tắt ánh sáng động
+        
+        -- Tắt các tính năng đồ họa tốn tài nguyên
         Lighting.GlobalShadows = false
         Lighting.Technology = Enum.Technology.Compatibility
         Lighting.OutdoorAmbient = Color3.fromRGB(200, 200, 200)
-        Lighting.Brightness = 5
+        Lighting.Brightness = 2.5 -- Độ sáng vừa phải
         Lighting.Ambient = Color3.fromRGB(200, 200, 200)
         Lighting.EnvironmentDiffuseScale = 0
         Lighting.EnvironmentSpecularScale = 0
+        Lighting.ClockTime = 14 -- Giữ thời gian ban ngày để sáng hơn
 
-        -- Tắt sương mù
+        -- Tắt sương mù hoàn toàn
         Lighting.FogEnd = 9e9
         Lighting.FogStart = 0
 
-        -- Xóa chỉ hiệu ứng không cần thiết
+        -- Xóa tất cả các hiệu ứng ánh sáng
         for _, effect in pairs(Lighting:GetChildren()) do
             if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or 
-               effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") then
+               effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or
+               effect:IsA("Sky") then -- Xóa cả sky để tăng FPS
                 SafeCall(function() effect:Destroy() end)
             end
         end
+
+        -- Tắt clipping decals để tăng performance
+        Workspace.ClipsDecals = false
+        
+        -- Giảm chất lượng rendering của mặt đất
+        Workspace.Terrain.WaterWaveSize = 0
+        Workspace.Terrain.WaterWaveSpeed = 0
+        Workspace.Terrain.WaterReflectance = 0
+        Workspace.Terrain.WaterTransparency = 0.5
     end)
 
-    print("✅ Đồ họa đã tối ưu")
+    print("✅ Đồ họa đã được tối ưu ở mức Potato")
 end
 
--- ===== 2. XÓA HIỆU ỨNG (GIỮ MAP) =====
+-- ===== 2. XÓA HIỆU ỨNG KHÔNG CẦN THIẾT =====
 local function RemoveAllEffects()
     print("🧹 Xóa hiệu ứng không cần thiết...")
 
@@ -137,29 +153,40 @@ local function RemoveAllEffects()
 
     for _, obj in pairs(Workspace:GetDescendants()) do
         SafeCall(function()
-            -- Xóa PARTICLES (không ảnh hưởng map)
+            -- Xóa PARTICLES
             if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or 
                obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") or
                obj:IsA("Beam") then
-                obj.Enabled = false
+                obj:Destroy() -- Xóa hẳn thay vì chỉ tắt
                 count = count + 1
             end
 
-            -- Xóa ÁNH SÁNG (không ảnh hưởng map)
+            -- Xóa ÁNH SÁNG
             if obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-                obj.Enabled = false
+                obj:Destroy() -- Xóa hẳn
                 count = count + 1
             end
 
-            -- TỐI ƯU PARTS (KHÔNG LÀM MẤT MAP)
+            -- TỐI ƯU PARTS
             if obj:IsA("BasePart") or obj:IsA("MeshPart") then
                 obj.Material = Enum.Material.Plastic
                 obj.Reflectance = 0
                 obj.CastShadow = false
 
                 -- CHỈ xóa texture của objects KHÔNG PHẢI MAP
-                if obj:IsA("MeshPart") and Config.RemoveTextures and not IsMapPart(obj) then
-                    obj.TextureID = ""
+                if Config.RemoveTextures and not IsMapPart(obj) then
+                    if obj:IsA("MeshPart") then
+                        obj.TextureID = ""
+                    end
+                end
+                
+                -- Xóa decals của objects không phải map
+                if Config.RemoveDecals and not IsMapPart(obj) then
+                    for _, child in pairs(obj:GetChildren()) do
+                        if child:IsA("Decal") or child:IsA("Texture") then
+                            child:Destroy()
+                        end
+                    end
                 end
 
                 PerformanceStats.PartsOptimized = PerformanceStats.PartsOptimized + 1
@@ -171,12 +198,12 @@ local function RemoveAllEffects()
     print("✅ Đã xóa " .. count .. " hiệu ứng")
 end
 
--- ===== 3. RENDER DISTANCE THÔNG MINH (ĐÃ SỬA) =====
+-- ===== 3. RENDER DISTANCE THÔNG MINH =====
 local function SmartRenderDistance()
     print("👁️ Kích hoạt render distance thông minh...")
 
     local lastUpdate = 0
-    local updateInterval = 2 -- Giảm tần suất update
+    local updateInterval = 1.5 -- Tăng tần suất update để mượt hơn
 
     RunService.Heartbeat:Connect(function()
         local currentTime = tick()
@@ -232,7 +259,7 @@ local function OptimizeTerrain()
         if terrain then
             terrain.Decoration = false
             terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 0.5 -- GIỮ một chút để thấy nước
+            terrain.WaterTransparency = 0.5
             terrain.WaterWaveSize = 0
             terrain.WaterWaveSpeed = 0
         end
@@ -241,7 +268,7 @@ local function OptimizeTerrain()
     print("✅ Địa hình đã tối ưu")
 end
 
--- ===== 5. GIẢM PHYSICS (CHỈ OBJECTS NHỎ) =====
+-- ===== 5. GIẢM PHYSICS =====
 local function ReducePhysics()
     print("⚙️ Giảm physics objects nhỏ...")
 
@@ -302,18 +329,23 @@ local function AggressiveMemoryCleanup()
     print("✅ Bộ nhớ đã được dọn")
 end
 
--- ===== 8. TỐI ƯU CHARACTER =====
+-- ===== 8. TỐI ƯU CHARACTER (LÀM ĐẦU TRONG SUỐT) =====
 local function OptimizeCharacter(character)
     task.wait(0.5)
 
     SafeCall(function()
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.HealthDisplayDistance = 0
-            humanoid.NameDisplayDistance = 0
+        -- ===== MỚI: LÀM ĐẦU NGƯỜI CHƠI LOCAL TRONG SUỐT =====
+        if character.Parent == Player then
+            local head = character:FindFirstChild("Head")
+            if head then
+                -- Làm trong suốt hoàn toàn và vô hiệu hóa va chạm
+                head.Transparency = 1
+                head.CanCollide = false
+                print("✅ Đã làm trong suốt đầu người chơi local")
+            end
         end
 
-        -- Tối ưu accessories
+        -- Tối ưu accessories cho tất cả người chơi
         for _, accessory in pairs(character:GetChildren()) do
             if accessory:IsA("Accessory") then
                 local handle = accessory:FindFirstChild("Handle")
@@ -325,7 +357,7 @@ local function OptimizeCharacter(character)
             end
         end
 
-        -- Tối ưu body parts
+        -- Tối ưu body parts cho tất cả người chơi
         for _, part in pairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.Material = Enum.Material.Plastic
@@ -391,8 +423,8 @@ end
 -- ===== KHỞI ĐỘNG SCRIPT =====
 local function Initialize()
     print("╔" .. string.rep("═", 60) .. "╗")
-    print("║  🚀 ULTRA LAG FIX PRO V3.1 (FIXED MAP)                   ║")
-    print("║  📱 Tối ưu cho Realme C11 - GIỮ MAP                      ║")
+    print("║  🚀 ULTRA LAG FIX PRO V4.0 (REALME C11 EDITION)       ║")
+    print("║  📱 Tối ưu siêu cấp - Làm đầu trong suốt - Giữ map      ║")
     print("╚" .. string.rep("═", 60) .. "╝")
 
     local startTime = tick()
@@ -439,6 +471,7 @@ local function Initialize()
 
     print("╔" .. string.rep("═", 60) .. "╗")
     print("║  ✅ TỐI ƯU HOÀN TẤT - MAP VẪN HIỂN THỊ!                 ║")
+    print("║  🤖 Đầu người chơi local đã được làm trong suốt           ║")
     print("║  ⏱️  Thời gian: " .. loadTime .. " giây" .. string.rep(" ", 37 - #tostring(loadTime)) .. "║")
     print("║  📊 Parts tối ưu: " .. PerformanceStats.PartsOptimized .. string.rep(" ", 37 - #tostring(PerformanceStats.PartsOptimized)) .. "║")
     print("║  🧹 Effects xóa: " .. PerformanceStats.EffectsRemoved .. string.rep(" ", 38 - #tostring(PerformanceStats.EffectsRemoved)) .. "║")
@@ -447,4 +480,5 @@ local function Initialize()
     print("╚" .. string.rep("═", 60) .. "╝")
 end
 
+-- Chạy script với xử lý lỗi
 SafeCall(Initialize)
