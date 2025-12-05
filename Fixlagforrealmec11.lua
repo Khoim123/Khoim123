@@ -1,5 +1,5 @@
 -- ROBLOX SIÊU LAG FIX CHO REALME C11 (RAM 2GB)
--- Script tối ưu CỰC MẠNH - Skin người chơi màu trắng, người khác giữ nguyên
+-- Script tối ưu CỰC MẠNH - Skin trắng + TẮT ĐẦU, người khác giữ nguyên
 
 print("🔧 Đang khởi động SIÊU Lag Fix cho Realme C11...")
 
@@ -25,6 +25,7 @@ local Config = {
     DisableBlur = true,
     ReducePhysics = true,
     MyPlayerWhite = true, -- Skin của BẠN màu trắng
+    RemoveMyHead = true, -- TẮT ĐẦU của bạn
     OtherPlayersNormal = true, -- Người khác giữ nguyên
     SimplifyAccessories = true,
     ReduceAnimationQuality = true,
@@ -64,11 +65,11 @@ local function OptimizeGraphics()
     print("✅ Đồ họa đã được tối ưu SIÊU MẠNH")
 end
 
--- ===== 2. XÓA TEXTURE VÀ ĐỔI MÀU TRẮNG CHO NGƯỜI CHƠI CỦA BẠN =====
+-- ===== 2. XÓA TEXTURE, ĐỔI MÀU TRẮNG VÀ TẮT ĐẦU CHO NGƯỜI CHƠI CỦA BẠN =====
 local function RemoveMyPlayerTextures(character)
     if not character then return end
     
-    print("👤 Đang xóa họa tiết và đổi màu TRẮNG cho nhân vật của bạn...")
+    print("👤 Đang xóa họa tiết, đổi màu TRẮNG và TẮT ĐẦU cho nhân vật của bạn...")
     
     for _, part in pairs(character:GetDescendants()) do
         -- Xử lý body parts
@@ -95,6 +96,20 @@ local function RemoveMyPlayerTextures(character)
                 -- MÀU TRẮNG TINH
                 part.Color = Color3.fromRGB(255, 255, 255)
             end
+            
+            -- TẮT ĐẦU (ẨN ĐẦU HOÀN TOÀN)
+            if Config.RemoveMyHead and part.Name == "Head" then
+                part.Transparency = 1 -- Làm trong suốt hoàn toàn
+                part.CanCollide = false
+                part.Size = Vector3.new(0.1, 0.1, 0.1) -- Làm nhỏ đi
+                
+                -- Xóa tất cả mesh trong đầu
+                for _, child in pairs(part:GetChildren()) do
+                    if child:IsA("SpecialMesh") or child:IsA("Decal") then
+                        child:Destroy()
+                    end
+                end
+            end
         end
         
         -- Xóa Decals (mặt)
@@ -112,14 +127,33 @@ local function RemoveMyPlayerTextures(character)
             part:Destroy()
         end
         
-        -- Đơn giản hóa phụ kiện
+        -- Đơn giản hóa và ẨN phụ kiện trên đầu
         if part:IsA("Accessory") or part.Name == "Accessory" then
-            if Config.SimplifyAccessories then
-                local handle = part:FindFirstChild("Handle")
-                if handle and handle:IsA("MeshPart") then
-                    handle.TextureID = ""
-                    handle.Material = Enum.Material.SmoothPlastic
-                    handle.Color = Color3.fromRGB(255, 255, 255) -- Phụ kiện cũng trắng
+            local handle = part:FindFirstChild("Handle")
+            if handle then
+                -- Kiểm tra xem phụ kiện có gắn vào đầu không
+                local attachment = handle:FindFirstChildOfClass("Attachment")
+                if attachment then
+                    local attachmentName = attachment.Name
+                    -- Nếu là phụ kiện đầu thì ẩn luôn
+                    if attachmentName:find("Hat") or attachmentName:find("Hair") or 
+                       attachmentName:find("Face") or attachmentName:find("Head") then
+                        if Config.RemoveMyHead then
+                            handle.Transparency = 1
+                            for _, child in pairs(handle:GetDescendants()) do
+                                if child:IsA("BasePart") or child:IsA("MeshPart") then
+                                    child.Transparency = 1
+                                end
+                            end
+                        end
+                    else
+                        -- Phụ kiện khác (không phải đầu) thì chỉ làm trắng
+                        if Config.SimplifyAccessories and handle:IsA("MeshPart") then
+                            handle.TextureID = ""
+                            handle.Material = Enum.Material.SmoothPlastic
+                            handle.Color = Color3.fromRGB(255, 255, 255)
+                        end
+                    end
                 end
             end
         end
@@ -138,7 +172,16 @@ local function RemoveMyPlayerTextures(character)
         end
     end
     
-    print("✅ Đã đổi nhân vật của bạn thành màu TRẮNG")
+    -- Ẩn Face (mặt)
+    local head = character:FindFirstChild("Head")
+    if head then
+        local face = head:FindFirstChildOfClass("Decal")
+        if face then
+            face:Destroy()
+        end
+    end
+    
+    print("✅ Đã đổi nhân vật của bạn thành màu TRẮNG và TẮT ĐẦU")
 end
 
 -- ===== 3. XÓA CÁC HIỆU ỨNG KHÔNG CẦN THIẾT (KHÔNG ẢNH HƯỞNG NGƯỜI CHƠI KHÁC) =====
@@ -342,7 +385,7 @@ local function Initialize()
     print("=" .. string.rep("=", 50))
     print("🚀 ROBLOX SIÊU LAG FIX CHO REALME C11")
     print("📱 Tối ưu đặc biệt cho RAM 2GB")
-    print("👤 Bạn: MÀU TRẮNG | Người khác: GIỮ NGUYÊN")
+    print("👤 Bạn: MÀU TRẮNG + TẮT ĐẦU | Người khác: GIỮ NGUYÊN")
     print("=" .. string.rep("=", 50))
 
     -- Chạy các tối ưu
@@ -366,7 +409,7 @@ local function Initialize()
     -- Setup theo dõi người chơi
     SetupPlayerTracking()
 
-    -- Đổi skin của BẠN thành màu trắng
+    -- Đổi skin của BẠN thành màu trắng và TẮT ĐẦU
     if Player.Character then
         RemoveMyPlayerTextures(Player.Character)
         OptimizeCharacter(Player.Character)
@@ -374,7 +417,7 @@ local function Initialize()
 
     Player.CharacterAdded:Connect(function(character)
         task.wait(1)
-        RemoveMyPlayerTextures(character) -- Chỉ đổi màu BẠN
+        RemoveMyPlayerTextures(character) -- Chỉ đổi màu BẠN và TẮT ĐẦU
         OptimizeCharacter(character)
     end)
 
@@ -387,8 +430,8 @@ local function Initialize()
 
     print("=" .. string.rep("=", 50))
     print("✅ TỐI ƯU HOÀN TẤT!")
-    print("👤 Nhân vật của BẠN: MÀU TRẮNG TINH ✨")
-    print("👥 Người chơi KHÁC: GIỮ NGUYÊN MÀU 🎨")
+    print("👤 Nhân vật của BẠN: MÀU TRẮNG + KHÔNG ĐẦU 👻")
+    print("👥 Người chơi KHÁC: GIỮ NGUYÊN ĐẦU + MÀU 🎨")
     print("📊 FPS sẽ cải thiện đáng kể")
     print("💡 Nếu vẫn lag, hãy tắt các app khác")
     print("=" .. string.rep("=", 50))
