@@ -23,11 +23,6 @@ local tween = TweenService:Create(hrp, TweenInfo.new(time), {
 
 tween:Play()
 
--- Khoá jump và di chuyển
-local humanoid = character:WaitForChild("Humanoid")
-humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-humanoid.WalkSpeed = 0
-
 --nhận nhiệm vụ bandit
 local args = {
 	"StartQuest",
