@@ -36,7 +36,9 @@ local args = {
 }
 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
 
--- FARM QUÁI BẰNG GF + BRING (THÊM Ở ĐÂY)
+-- FARM BẰNG CHUỘT TRÁI + BRING
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
 while task.wait(0.1) do
     -- Bring mob
     for _, mob in pairs(workspace.Enemies:GetChildren()) do
@@ -49,8 +51,8 @@ while task.wait(0.1) do
         end
     end
     
-    -- Đánh bằng GF
-    pcall(function()
-        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("GF")
-    end)
+    -- Click chuột trái liên tục
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 end
