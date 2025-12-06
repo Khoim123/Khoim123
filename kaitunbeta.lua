@@ -31,6 +31,7 @@ local tween = TweenService:Create(hrp, tweenInfo, {
 
 tween:Play()
 tween.Completed:Wait()
+task.wait(0.5)
 
 --nhận nhiệm vụ bandit
 local args = {
