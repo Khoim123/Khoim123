@@ -5,10 +5,6 @@ local args = {
 	"Pirates"  --Pirates or Marines
 }
 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-
 --Tween tới npc nhận nhiệm vụ hải tặc
 task.wait(5)
 local TweenService = game:GetService("TweenService")
