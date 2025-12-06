@@ -24,6 +24,10 @@ local tween = TweenService:Create(hrp, TweenInfo.new(time), {
 
 tween:Play()
 
+-- khoá di chuyển
+local hrp = game.Players.LocalPlayer.Character.HumanoidRootPart
+hrp.Anchored = true
+
 --nhận nhiệm vụ bandit
 local args = {
 	"StartQuest",
