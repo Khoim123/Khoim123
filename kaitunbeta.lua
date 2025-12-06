@@ -28,4 +28,4 @@ local tween = TweenService:Create(hrp, TweenInfo.new(time), {
 
 tween:Play()
 
--nhận nhiệm vụ bandit
+--nhận nhiệm vụ bandit
