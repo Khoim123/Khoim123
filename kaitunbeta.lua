@@ -6,33 +6,25 @@ local args = {
 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
 --Tween tới npc nhận nhiệm vụ hải tặc
 
-task.wait(5)
-local TweenService = game:GetService("TweenService")
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local hrp = character:WaitForChild("HumanoidRootPart")
-local npc = workspace.NPCs["Bandit Quest Giver"]
-
-local speed = 325
-local targetCFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
-local distance = (hrp.Position - targetCFrame.Position).Magnitude
-local time = distance / speed
-
--- TweenInfo đều đặn
-local tweenInfo = TweenInfo.new(
-    time,
-    Enum.EasingStyle.Linear,  -- Đều đặn
-    Enum.EasingDirection.Out
-)
-
-local tween = TweenService:Create(hrp, tweenInfo, {
-    CFrame = targetCFrame
-})
-
-tween:Play()
-tween.Completed:Wait()
-task.wait(0.5)
-
+local function tweenToNPC()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    
+    -- Vị trí NPC
+    local npcPosition = Vector3.new(1058.96802, 12.6660004, 1551.81396)
+    
+    local speed = 325
+    local targetCFrame = CFrame.new(npcPosition)
+    local distance = (hrp.Position - npcPosition).Magnitude
+    local time = distance / speed
+    
+    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    
+    tween:Play()
+    tween.Completed:Wait()
+    task.wait(0.5)
+end
 -cầm melee
 local player = game.Players.LocalPlayer
 local character = player.Character
