@@ -34,24 +34,3 @@ local args = {
 	1
 }
 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
-
--- FARM BẰNG CHUỘT TRÁI + BRING
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
-while task.wait(0.1) do
-    -- Bring mob
-    for _, mob in pairs(workspace.Enemies:GetChildren()) do
-        if mob.Name == "Bandit" and mob:FindFirstChild("HumanoidRootPart") then
-            if mob.Humanoid.Health > 0 then
-                mob.HumanoidRootPart.CFrame = hrp.CFrame * CFrame.new(0, -10, 0)
-                mob.HumanoidRootPart.CanCollide = false
-                mob.HumanoidRootPart.Size = Vector3.new(60, 60, 60)
-            end
-        end
-    end
-    
-    -- Click chuột trái liên tục
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    task.wait(0.05)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-end
