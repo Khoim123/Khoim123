@@ -25,3 +25,9 @@ local tween = TweenService:Create(hrp, TweenInfo.new(time), {
 tween:Play()
 
 --nhận nhiệm vụ bandit
+local args = {
+	"StartQuest",
+	"BanditQuest1",
+	1
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
