@@ -35,3 +35,22 @@ local args = {
 	1
 }
 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
+
+-- FARM QUÁI BẰNG GF + BRING (THÊM Ở ĐÂY)
+while task.wait(0.1) do
+    -- Bring mob
+    for _, mob in pairs(workspace.Enemies:GetChildren()) do
+        if mob.Name == "Bandit" and mob:FindFirstChild("HumanoidRootPart") then
+            if mob.Humanoid.Health > 0 then
+                mob.HumanoidRootPart.CFrame = hrp.CFrame * CFrame.new(0, -10, 0)
+                mob.HumanoidRootPart.CanCollide = false
+                mob.HumanoidRootPart.Size = Vector3.new(60, 60, 60)
+            end
+        end
+    end
+    
+    -- Đánh bằng GF
+    pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("GF")
+    end)
+end
