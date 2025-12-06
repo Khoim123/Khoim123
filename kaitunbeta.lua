@@ -33,6 +33,17 @@ tween:Play()
 tween.Completed:Wait()
 task.wait(0.5)
 
+-cầm melee
+local player = game.Players.LocalPlayer
+local character = player.Character
+
+for _, tool in pairs(player.Backpack:GetChildren()) do
+    if tool:IsA("Tool") and tool.ToolTip == "Melee" then
+        character.Humanoid:EquipTool(tool)
+        break
+    end
+end
+
 --nhận nhiệm vụ bandit
 local args = {
 	"StartQuest",
