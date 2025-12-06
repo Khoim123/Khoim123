@@ -1,5 +1,4 @@
 -- Chọn phe hải tặc hoặc hải quân
-task.wait(5)
 local args = {
 	"SetTeam",
 	"Pirates"  --Pirates or Marines
