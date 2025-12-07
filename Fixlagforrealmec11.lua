@@ -1,269 +1,296 @@
--- ROBLOX SIÊU LAG FIX CHO REALME C11 (RAM 2GB)
--- Script tối ưu CỰC MẠNH - Đơn giản hóa, không thay đổi nhân vật
+-- ROBLOX ULTRA LAG FIX V3.0 - OPTIMIZED FOR LOW-END DEVICES
+-- Đặt script trong StarterPlayerScripts hoặc StarterCharacterScripts
 
-print("🔧 Đang khởi động SIÊU Lag Fix cho Realme C11...")
+print("🔧 Khởi động Ultra Lag Fix V3.0...")
 
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ContentProvider = game:GetService("ContentProvider")
 
 local Player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- ===== CẤU HÌNH SIÊU TỐI ƯU =====
+-- ===== CẤU HÌNH TỐI ƯU =====
 local Config = {
-    RenderDistance = 250, -- TĂNG tầm nhìn tối đa
-    GraphicsQuality = 1,
-    RemoveShadows = true,
-    RemoveParticles = true,
-    RemoveDecals = true,
-    RemoveTextures = true,
-    OptimizeTerrain = true,
-    DisableBloom = true,
-    DisableBlur = true,
-    ReducePhysics = true,
+    RenderDistance = 200,
+    UpdateInterval = 0.5,
+    EnableDynamicCulling = true,
+    MaxVisibleParts = 1000
 }
 
--- ===== 1. TỐI ƯU ĐỒ HỌA SIÊU MẠNH =====
+-- ===== 1. TỐI ƯU ĐỒ HỌA NÂNG CAO =====
 local function OptimizeGraphics()
-    print("📊 Đang tối ưu đồ họa SIÊU MẠNH...")
-
+    print("📊 Tối ưu đồ họa...")
+    
+    -- Chất lượng thấp nhất
     settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-    settings().Rendering.EnableVSync = false
+    
+    -- Tắt các tính năng nâng cao
+    pcall(function() settings().Rendering.EnableVSync = false end)
+    pcall(function() UserSettings():GetService("UserGameSettings").SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1 end)
+    
     settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
-
-    if Config.RemoveShadows then
-        Lighting.GlobalShadows = false
-        Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-        Lighting.Brightness = 2
-        Lighting.EnvironmentDiffuseScale = 0
-        Lighting.EnvironmentSpecularScale = 0
-        Lighting.Technology = Enum.Technology.Legacy
-    end
-
-    for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or 
-           effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or 
-           effect:IsA("DepthOfFieldEffect") or effect:IsA("SkyEffect") then
-            effect.Enabled = false
+    settings().Rendering.EditQualityLevel = Enum.QualityLevel.Level01
+    
+    -- Tối ưu ánh sáng
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 100000
+    Lighting.FogStart = 0
+    Lighting.Brightness = 2
+    Lighting.Technology = Enum.Technology.Legacy
+    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+    
+    -- Xóa hiệu ứng ánh sáng
+    for _, effect in ipairs(Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") or effect:IsA("Sky") then
+            effect:Destroy()
         end
     end
-
-    for _, obj in pairs(Lighting:GetChildren()) do
-        if obj:IsA("Sky") then
-            obj:Destroy()
-        end
-    end
-
-    print("✅ Đồ họa đã được tối ưu SIÊU MẠNH")
+    
+    -- Tắt bloom và blur mặc định
+    pcall(function()
+        Lighting.Bloom.Enabled = false
+        Lighting.Blur.Enabled = false
+    end)
+    
+    print("✅ Đồ họa đã tối ưu")
 end
 
--- ===== 2. XÓA CÁC HIỆU ỨNG KHÔNG CẦN THIẾT (KHÔNG ẢNH HƯỞNG NGƯỜI CHƠI) =====
-local function RemoveEffects()
-    print("🧹 Đang xóa hiệu ứng...")
+-- ===== 2. XÓA HIỆU ỨNG VÀ TỐI ƯU PARTS =====
+local processedParts = {}
 
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        -- Bỏ qua tất cả người chơi (giữ nguyên)
-        local isPlayerCharacter = false
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character and obj:IsDescendantOf(player.Character) then
-                isPlayerCharacter = true
+local function OptimizePart(obj)
+    if processedParts[obj] then return end
+    processedParts[obj] = true
+    
+    -- Tối ưu BasePart
+    if obj:IsA("BasePart") then
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
+        obj.CastShadow = false
+        
+        -- Giảm chi tiết collision cho parts xa
+        if obj.CanCollide and not obj:IsDescendantOf(Player.Character or workspace) then
+            pcall(function()
+                if (obj.Position - Camera.CFrame.Position).Magnitude > Config.RenderDistance then
+                    obj.CanCollide = false
+                end
+            end)
+        end
+    end
+    
+    -- Xóa texture trên MeshPart
+    if obj:IsA("MeshPart") then
+        obj.TextureID = ""
+        pcall(function() obj.RenderFidelity = Enum.RenderFidelity.Performance end)
+    end
+    
+    -- Xóa decals và textures
+    if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SurfaceAppearance") then
+        obj:Destroy()
+    end
+end
+
+local function RemoveEffects()
+    print("🧹 Xóa hiệu ứng và tối ưu parts...")
+    
+    local character = Player.Character
+    local effects = {
+        "ParticleEmitter", "Trail", "Smoke", "Fire", 
+        "Sparkles", "Beam", "PointLight", "SpotLight", 
+        "SurfaceLight"
+    }
+    
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        -- Bỏ qua character của player
+        if character and obj:IsDescendantOf(character) then 
+            continue 
+        end
+        
+        -- Xóa hiệu ứng
+        for _, effectType in ipairs(effects) do
+            if obj:IsA(effectType) then
+                obj:Destroy()
                 break
             end
         end
-
-        if not isPlayerCharacter then
-            -- Xóa Particle Effects
-            if Config.RemoveParticles and (obj:IsA("ParticleEmitter") or obj:IsA("Trail") or 
-               obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") or obj:IsA("Beam")) then
-                obj:Destroy()
-            end
-
-            -- Xóa Decals và Textures
-            if Config.RemoveDecals and (obj:IsA("Decal") or obj:IsA("Texture")) then
-                obj:Destroy()
-            end
-
-            -- Xóa SurfaceAppearance
-            if obj:IsA("SurfaceAppearance") then
-                obj:Destroy()
-            end
-
-            -- Tối ưu Material
-            if obj:IsA("BasePart") then
-                obj.Material = Enum.Material.SmoothPlastic
-                obj.Reflectance = 0
-                obj.CastShadow = false
-            end
-
-            -- Xóa texture MeshPart
-            if obj:IsA("MeshPart") then
-                obj.TextureID = ""
-            end
-
-            -- Xóa các SpecialMesh texture
-            if obj:IsA("SpecialMesh") then
-                obj.TextureId = ""
-            end
-        end
+        
+        -- Tối ưu parts
+        OptimizePart(obj)
     end
-
-    print("✅ Hiệu ứng đã được xóa (người chơi GIỮ NGUYÊN)")
+    
+    print("✅ Đã xóa hiệu ứng")
 end
 
--- ===== 3. TỐI ƯU RENDER DISTANCE =====
-local function OptimizeRenderDistance()
-    print("👁️ Đang tối ưu tầm nhìn...")
+-- ===== 3. CULLING ĐỘNG (Ẩn vật thể xa) =====
+local cullConnection
 
+local function StartDynamicCulling()
+    if not Config.EnableDynamicCulling then return end
+    
+    print("👁️ Bật culling động...")
+    
     local lastUpdate = 0
-    local updateInterval = 0.5
-
-    RunService.RenderStepped:Connect(function()
-        local currentTime = tick()
-        if currentTime - lastUpdate < updateInterval then return end
-        lastUpdate = currentTime
-
-        if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-            local playerPos = Player.Character.HumanoidRootPart.Position
-
-            for _, obj in pairs(Workspace:GetChildren()) do
-                -- BỎ QUA TẤT CẢ NGƯỜI CHƠI (giữ nguyên hiển thị)
-                local isPlayerModel = false
-                for _, player in pairs(Players:GetPlayers()) do
-                    if obj == player.Character then
-                        isPlayerModel = true
-                        break
-                    end
+    local visibleParts = {}
+    
+    cullConnection = RunService.Heartbeat:Connect(function()
+        local now = tick()
+        if now - lastUpdate < Config.UpdateInterval then return end
+        lastUpdate = now
+        
+        local camPos = Camera.CFrame.Position
+        local character = Player.Character
+        
+        -- Reset visibility
+        for part, _ in pairs(visibleParts) do
+            if part and part.Parent then
+                part.Transparency = part:GetAttribute("OriginalTransparency") or part.Transparency
+            end
+            visibleParts[part] = nil
+        end
+        
+        -- Ẩn parts xa
+        local count = 0
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if count > Config.MaxVisibleParts then break end
+            
+            if obj:IsA("BasePart") and obj.Parent then
+                if character and obj:IsDescendantOf(character) then 
+                    continue 
                 end
-
-                if not isPlayerModel and obj:IsA("Model") then
-                    local primaryPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                    if primaryPart then
-                        local distance = (primaryPart.Position - playerPos).Magnitude
-
-                        if distance > Config.RenderDistance then
-                            for _, part in pairs(obj:GetDescendants()) do
-                                if part:IsA("BasePart") then
-                                    part.Transparency = 1
-                                    part.CanCollide = false
-                                end
-                            end
-                        else
-                            for _, part in pairs(obj:GetDescendants()) do
-                                if part:IsA("BasePart") then
-                                    if not part:GetAttribute("OriginalTransparency") then
-                                        part:SetAttribute("OriginalTransparency", part.Transparency)
-                                    end
-                                    part.Transparency = part:GetAttribute("OriginalTransparency")
-                                end
-                            end
-                        end
+                
+                local distance = (obj.Position - camPos).Magnitude
+                
+                if distance > Config.RenderDistance then
+                    if not obj:GetAttribute("OriginalTransparency") then
+                        obj:SetAttribute("OriginalTransparency", obj.Transparency)
                     end
+                    obj.Transparency = 1
+                else
+                    visibleParts[obj] = true
+                    count = count + 1
                 end
             end
         end
     end)
-
-    print("✅ Tầm nhìn đã được tối ưu (người chơi LUÔN HIỂN THỊ)")
+    
+    print("✅ Culling động đã bật")
 end
 
 -- ===== 4. TỐI ƯU TERRAIN =====
 local function OptimizeTerrain()
-    if Config.OptimizeTerrain then
-        print("🏔️ Đang tối ưu địa hình...")
+    print("🏔️ Tối ưu terrain...")
+    
+    local terrain = Workspace:FindFirstChildOfClass("Terrain")
+    if terrain then
+        terrain.Decoration = false
+        terrain.WaterReflectance = 0
+        terrain.WaterTransparency = 0.5
+        terrain.WaterWaveSize = 0
+        terrain.WaterWaveSpeed = 0
+        pcall(function() terrain.WaterColor = Color3.fromRGB(12, 84, 91) end)
+    end
+    
+    print("✅ Terrain đã tối ưu")
+end
 
-        local terrain = Workspace:FindFirstChildOfClass("Terrain")
-        if terrain then
-            terrain.Decoration = false
-            terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 0.5
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
+-- ===== 5. TỐI ƯU BỘ NHỚ =====
+local function OptimizeMemory()
+    print("🧹 Tối ưu bộ nhớ...")
+    
+    -- Dọn rác
+    collectgarbage("collect")
+    
+    -- Giảm preload content
+    pcall(function()
+        ContentProvider:SetBaseUrl("")
+    end)
+    
+    print("✅ Bộ nhớ đã tối ưu")
+end
+
+-- ===== 6. TỐI ƯU CAMERA =====
+local function OptimizeCamera()
+    print("📷 Tối ưu camera...")
+    
+    Camera.FieldOfView = 70
+    pcall(function()
+        Camera.CameraType = Enum.CameraType.Custom
+    end)
+    
+    print("✅ Camera đã tối ưu")
+end
+
+-- ===== 7. XỬ LÝ OBJECTS MỚI =====
+Workspace.DescendantAdded:Connect(function(obj)
+    task.wait()
+    
+    -- Xóa hiệu ứng mới
+    local effects = {"ParticleEmitter", "Trail", "Smoke", "Fire", "Sparkles", "Beam"}
+    for _, effectType in ipairs(effects) do
+        if obj:IsA(effectType) then
+            obj:Destroy()
+            return
         end
-
-        print("✅ Địa hình đã được tối ưu")
     end
-end
+    
+    -- Tối ưu parts mới
+    OptimizePart(obj)
+end)
 
--- ===== 5. GIẢM PHYSICS CALCULATIONS =====
-local function ReducePhysics()
-    if Config.ReducePhysics then
-        print("⚙️ Đang giảm physics...")
-
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            -- Bỏ qua người chơi
-            local isPlayerPart = false
-            for _, player in pairs(Players:GetPlayers()) do
-                if player.Character and obj:IsDescendantOf(player.Character) then
-                    isPlayerPart = true
-                    break
-                end
-            end
-
-            if not isPlayerPart and obj:IsA("BasePart") then
-                if obj:FindFirstChild("BodyVelocity") or obj:FindFirstChild("BodyGyro") or
-                   obj:FindFirstChild("BodyPosition") then
-                    obj.Anchored = true
-                end
-            end
-        end
-
-        print("✅ Physics đã được giảm")
-    end
-end
-
--- ===== 6. MEMORY CLEANUP =====
-local function CleanupMemory()
-    print("🧹 Đang dọn dẹp bộ nhớ...")
-
-    for i = 1, 3 do
-        task.wait(0.1)
-        collectgarbage("collect")
-    end
-
-    print("✅ Bộ nhớ đã được dọn dẹp")
-end
-
--- ===== KHỞI ĐỘNG SCRIPT =====
+-- ===== KHỞI ĐỘNG =====
 local function Initialize()
-    print("=" .. string.rep("=", 50))
-    print("🚀 ROBLOX SIÊU LAG FIX CHO REALME C11")
-    print("📱 Tối ưu đặc biệt cho RAM 2GB")
-    print("🎯 Tập trung vào hiệu suất, không thay đổi nhân vật")
-    print("=" .. string.rep("=", 50))
-
-    -- Chạy các tối ưu
+    print(string.rep("=", 60))
+    print("🚀 ULTRA LAG FIX V3.0")
+    print("📱 Tối ưu cho thiết bị RAM 2GB")
+    print(string.rep("=", 60))
+    
     OptimizeGraphics()
-    task.wait(0.5)
-
+    task.wait(0.3)
+    
     RemoveEffects()
-    task.wait(0.5)
-
+    task.wait(0.3)
+    
     OptimizeTerrain()
-    task.wait(0.5)
-
-    ReducePhysics()
-    task.wait(0.5)
-
-    OptimizeRenderDistance()
-    task.wait(0.5)
-
-    CleanupMemory()
-
-    -- Cleanup định kỳ
+    task.wait(0.3)
+    
+    OptimizeCamera()
+    task.wait(0.3)
+    
+    StartDynamicCulling()
+    task.wait(0.3)
+    
+    OptimizeMemory()
+    
+    -- Dọn rác định kỳ
     task.spawn(function()
-        while task.wait(60) do
-            CleanupMemory()
+        while true do
+            task.wait(60)
+            collectgarbage("collect")
         end
     end)
-
-    print("=" .. string.rep("=", 50))
+    
+    print(string.rep("=", 60))
     print("✅ TỐI ƯU HOÀN TẤT!")
-    print("📊 FPS sẽ cải thiện đáng kể")
-    print("💡 Nếu vẫn lag, hãy tắt các app khác")
-    print("=" .. string.rep("=", 50))
+    print("📊 FPS sẽ tăng đáng kể")
+    print("💡 Mẹo: Tắt ứng dụng nền + giảm âm lượng game")
+    print(string.rep("=", 60))
 end
 
--- Chạy script
+-- Đợi character load xong
+if not Player.Character then
+    Player.CharacterAdded:Wait()
+end
+
+task.wait(2)
 Initialize()
+
+-- Cleanup khi player rời
+Players.PlayerRemoving:Connect(function(plr)
+    if plr == Player and cullConnection then
+        cullConnection:Disconnect()
+    end
+end)
