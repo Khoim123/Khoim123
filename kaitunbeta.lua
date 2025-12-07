@@ -27,7 +27,7 @@ tween:Play()
 tween.Completed:Wait()
 task.wait(0.5)
 
--- ✅ Cấm melee
+-- ✅ Cầm melee
 for _, tool in pairs(player.Backpack:GetChildren()) do
     if tool:IsA("Tool") and tool.ToolTip == "Melee" then
         character.Humanoid:EquipTool(tool)
