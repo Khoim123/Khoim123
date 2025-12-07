@@ -16,7 +16,7 @@ local Camera = Workspace.CurrentCamera
 local Config = {
     RenderDistance = 300,
     UpdateInterval = 0.5,
-    EnableDynamicCulling = true,
+    EnableDynamicCulling = false, -- TẮT để tránh lỗi map
     MaxVisibleParts = 1000
 }
 
@@ -66,30 +66,34 @@ local function OptimizePart(obj)
     if processedParts[obj] then return end
     processedParts[obj] = true
     
-    -- Tối ưu BasePart
+    -- Bỏ qua character và descendants của players
+    local character = Player.Character
+    if character and obj:IsDescendantOf(character) then 
+        return 
+    end
+    
+    -- Kiểm tra nếu là part của player khác
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character and obj:IsDescendantOf(player.Character) then
+            return
+        end
+    end
+    
+    -- Tối ưu BasePart (KHÔNG TẮT COLLISION)
     if obj:IsA("BasePart") then
         obj.Material = Enum.Material.SmoothPlastic
         obj.Reflectance = 0
         obj.CastShadow = false
-        
-        -- Giảm chi tiết collision cho parts xa
-        if obj.CanCollide and not obj:IsDescendantOf(Player.Character or workspace) then
-            pcall(function()
-                if (obj.Position - Camera.CFrame.Position).Magnitude > Config.RenderDistance then
-                    obj.CanCollide = false
-                end
-            end)
-        end
+        -- GIỮ NGUYÊN CanCollide để map hoạt động bình thường
     end
     
     -- Xóa texture trên MeshPart
     if obj:IsA("MeshPart") then
         obj.TextureID = ""
-        -- Xóa dòng RenderFidelity vì gây lỗi
     end
     
-    -- Xóa decals và textures
-    if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SurfaceAppearance") then
+    -- Xóa decals và textures (KHÔNG XÓA QUAN TRỌNG)
+    if obj:IsA("SurfaceAppearance") then
         obj:Destroy()
     end
 end
@@ -100,15 +104,21 @@ local function RemoveEffects()
     local character = Player.Character
     local effects = {
         "ParticleEmitter", "Trail", "Smoke", "Fire", 
-        "Sparkles", "Beam", "PointLight", "SpotLight", 
-        "SurfaceLight"
+        "Sparkles", "Beam"
+        -- BỎ "PointLight", "SpotLight", "SurfaceLight" để giữ ánh sáng cơ bản
     }
     
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        -- Bỏ qua character của player
-        if character and obj:IsDescendantOf(character) then 
-            continue 
+        -- Bỏ qua character của tất cả players
+        local isPlayerChar = false
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character and obj:IsDescendantOf(player.Character) then
+                isPlayerChar = true
+                break
+            end
         end
+        
+        if isPlayerChar then continue end
         
         -- Xóa hiệu ứng
         for _, effectType in ipairs(effects) do
@@ -118,18 +128,21 @@ local function RemoveEffects()
             end
         end
         
-        -- Tối ưu parts
+        -- Tối ưu parts (GIỮ NGUYÊN MAP)
         OptimizePart(obj)
     end
     
     print("✅ Đã xóa hiệu ứng")
 end
 
--- ===== 3. CULLING ĐỘNG (Ẩn vật thể xa) =====
+-- ===== 3. CULLING ĐỘNG (Ẩn vật thể xa) - ĐÃ TẮT MẶC ĐỊNH =====
 local cullConnection
 
 local function StartDynamicCulling()
-    if not Config.EnableDynamicCulling then return end
+    if not Config.EnableDynamicCulling then 
+        print("⚠️ Culling động đã TẮT để tránh lỗi map")
+        return 
+    end
     
     print("👁️ Bật culling động...")
     
@@ -227,6 +240,13 @@ end
 Workspace.DescendantAdded:Connect(function(obj)
     task.wait()
     
+    -- Bỏ qua nếu là part của player
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character and obj:IsDescendantOf(player.Character) then
+            return
+        end
+    end
+    
     -- Xóa hiệu ứng mới
     local effects = {"ParticleEmitter", "Trail", "Smoke", "Fire", "Sparkles", "Beam"}
     for _, effectType in ipairs(effects) do
@@ -236,8 +256,11 @@ Workspace.DescendantAdded:Connect(function(obj)
         end
     end
     
-    -- Tối ưu parts mới
-    OptimizePart(obj)
+    -- Tối ưu parts mới (KHÔNG LÀM MẤT COLLISION)
+    if obj:IsA("BasePart") then
+        obj.CastShadow = false
+        obj.Reflectance = 0
+    end
 end)
 
 -- ===== KHỞI ĐỘNG =====
