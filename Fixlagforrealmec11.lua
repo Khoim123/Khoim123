@@ -1,5 +1,5 @@
 -- ROBLOX SIÊU LAG FIX CHO REALME C11 (RAM 2GB)
--- Script tối ưu CỰC MẠNH - Skin trắng + TẮT ĐẦU, người khác giữ nguyên
+-- Script tối ưu CỰC MẠNH - Đơn giản hóa, không thay đổi nhân vật
 
 print("🔧 Đang khởi động SIÊU Lag Fix cho Realme C11...")
 
@@ -7,14 +7,13 @@ local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 -- ===== CẤU HÌNH SIÊU TỐI ƯU =====
 local Config = {
-    RenderDistance = 80,
+    RenderDistance = 250, -- TĂNG tầm nhìn tối đa
     GraphicsQuality = 1,
     RemoveShadows = true,
     RemoveParticles = true,
@@ -24,11 +23,6 @@ local Config = {
     DisableBloom = true,
     DisableBlur = true,
     ReducePhysics = true,
-    MyPlayerWhite = true, -- Skin của BẠN màu trắng
-    RemoveMyHead = true, -- TẮT ĐẦU của bạn
-    OtherPlayersNormal = true, -- Người khác giữ nguyên
-    SimplifyAccessories = true,
-    ReduceAnimationQuality = true,
 }
 
 -- ===== 1. TỐI ƯU ĐỒ HỌA SIÊU MẠNH =====
@@ -65,126 +59,7 @@ local function OptimizeGraphics()
     print("✅ Đồ họa đã được tối ưu SIÊU MẠNH")
 end
 
--- ===== 2. XÓA TEXTURE, ĐỔI MÀU TRẮNG VÀ TẮT ĐẦU CHO NGƯỜI CHƠI CỦA BẠN =====
-local function RemoveMyPlayerTextures(character)
-    if not character then return end
-    
-    print("👤 Đang xóa họa tiết, đổi màu TRẮNG và TẮT ĐẦU cho nhân vật của bạn...")
-    
-    for _, part in pairs(character:GetDescendants()) do
-        -- Xử lý body parts
-        if part:IsA("BasePart") or part:IsA("MeshPart") then
-            -- Xóa texture
-            if part:IsA("MeshPart") then
-                part.TextureID = ""
-            end
-            
-            -- Đơn giản hóa material
-            part.Material = Enum.Material.SmoothPlastic
-            part.Reflectance = 0
-            part.CastShadow = false
-            
-            -- ĐỔI TẤT CẢ BODY PARTS THÀNH MÀU TRẮNG
-            if part.Name == "Head" or part.Name == "Torso" or part.Name == "UpperTorso" or
-               part.Name == "LowerTorso" or part.Name == "LeftUpperArm" or part.Name == "RightUpperArm" or
-               part.Name == "LeftLowerArm" or part.Name == "RightLowerArm" or 
-               part.Name == "LeftUpperLeg" or part.Name == "RightUpperLeg" or
-               part.Name == "LeftLowerLeg" or part.Name == "RightLowerLeg" or
-               part.Name == "LeftHand" or part.Name == "RightHand" or
-               part.Name == "LeftFoot" or part.Name == "RightFoot" or
-               part.Name == "HumanoidRootPart" then
-                -- MÀU TRẮNG TINH
-                part.Color = Color3.fromRGB(255, 255, 255)
-            end
-            
-            -- TẮT ĐẦU (ẨN ĐẦU HOÀN TOÀN)
-            if Config.RemoveMyHead and part.Name == "Head" then
-                part.Transparency = 1 -- Làm trong suốt hoàn toàn
-                part.CanCollide = false
-                part.Size = Vector3.new(0.1, 0.1, 0.1) -- Làm nhỏ đi
-                
-                -- Xóa tất cả mesh trong đầu
-                for _, child in pairs(part:GetChildren()) do
-                    if child:IsA("SpecialMesh") or child:IsA("Decal") then
-                        child:Destroy()
-                    end
-                end
-            end
-        end
-        
-        -- Xóa Decals (mặt)
-        if part:IsA("Decal") then
-            part:Destroy()
-        end
-        
-        -- Xóa texture trong SpecialMesh
-        if part:IsA("SpecialMesh") then
-            part.TextureId = ""
-        end
-        
-        -- Xóa SurfaceAppearance
-        if part:IsA("SurfaceAppearance") then
-            part:Destroy()
-        end
-        
-        -- Đơn giản hóa và ẨN phụ kiện trên đầu
-        if part:IsA("Accessory") or part.Name == "Accessory" then
-            local handle = part:FindFirstChild("Handle")
-            if handle then
-                -- Kiểm tra xem phụ kiện có gắn vào đầu không
-                local attachment = handle:FindFirstChildOfClass("Attachment")
-                if attachment then
-                    local attachmentName = attachment.Name
-                    -- Nếu là phụ kiện đầu thì ẩn luôn
-                    if attachmentName:find("Hat") or attachmentName:find("Hair") or 
-                       attachmentName:find("Face") or attachmentName:find("Head") then
-                        if Config.RemoveMyHead then
-                            handle.Transparency = 1
-                            for _, child in pairs(handle:GetDescendants()) do
-                                if child:IsA("BasePart") or child:IsA("MeshPart") then
-                                    child.Transparency = 1
-                                end
-                            end
-                        end
-                    else
-                        -- Phụ kiện khác (không phải đầu) thì chỉ làm trắng
-                        if Config.SimplifyAccessories and handle:IsA("MeshPart") then
-                            handle.TextureID = ""
-                            handle.Material = Enum.Material.SmoothPlastic
-                            handle.Color = Color3.fromRGB(255, 255, 255)
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Xóa BodyColors
-    local bodyColors = character:FindFirstChild("Body Colors")
-    if bodyColors then
-        bodyColors:Destroy()
-    end
-    
-    -- Xóa Shirt và Pants (áo quần)
-    for _, clothing in pairs(character:GetChildren()) do
-        if clothing:IsA("Shirt") or clothing:IsA("Pants") or clothing:IsA("ShirtGraphic") then
-            clothing:Destroy()
-        end
-    end
-    
-    -- Ẩn Face (mặt)
-    local head = character:FindFirstChild("Head")
-    if head then
-        local face = head:FindFirstChildOfClass("Decal")
-        if face then
-            face:Destroy()
-        end
-    end
-    
-    print("✅ Đã đổi nhân vật của bạn thành màu TRẮNG và TẮT ĐẦU")
-end
-
--- ===== 3. XÓA CÁC HIỆU ỨNG KHÔNG CẦN THIẾT (KHÔNG ẢNH HƯỞNG NGƯỜI CHƠI KHÁC) =====
+-- ===== 2. XÓA CÁC HIỆU ỨNG KHÔNG CẦN THIẾT (KHÔNG ẢNH HƯỞNG NGƯỜI CHƠI) =====
 local function RemoveEffects()
     print("🧹 Đang xóa hiệu ứng...")
 
@@ -197,7 +72,7 @@ local function RemoveEffects()
                 break
             end
         end
-        
+
         if not isPlayerCharacter then
             -- Xóa Particle Effects
             if Config.RemoveParticles and (obj:IsA("ParticleEmitter") or obj:IsA("Trail") or 
@@ -234,12 +109,12 @@ local function RemoveEffects()
         end
     end
 
-    print("✅ Hiệu ứng đã được xóa (người chơi khác GIỮ NGUYÊN)")
+    print("✅ Hiệu ứng đã được xóa (người chơi GIỮ NGUYÊN)")
 end
 
--- ===== 4. TỐI ƯU RENDER DISTANCE CỰC MẠNH =====
+-- ===== 3. TỐI ƯU RENDER DISTANCE =====
 local function OptimizeRenderDistance()
-    print("👁️ Đang tối ưu tầm nhìn CỰC MẠNH...")
+    print("👁️ Đang tối ưu tầm nhìn...")
 
     local lastUpdate = 0
     local updateInterval = 0.5
@@ -261,7 +136,7 @@ local function OptimizeRenderDistance()
                         break
                     end
                 end
-                
+
                 if not isPlayerModel and obj:IsA("Model") then
                     local primaryPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
                     if primaryPart then
@@ -293,7 +168,7 @@ local function OptimizeRenderDistance()
     print("✅ Tầm nhìn đã được tối ưu (người chơi LUÔN HIỂN THỊ)")
 end
 
--- ===== 5. TỐI ƯU TERRAIN =====
+-- ===== 4. TỐI ƯU TERRAIN =====
 local function OptimizeTerrain()
     if Config.OptimizeTerrain then
         print("🏔️ Đang tối ưu địa hình...")
@@ -311,7 +186,7 @@ local function OptimizeTerrain()
     end
 end
 
--- ===== 6. GIẢM PHYSICS CALCULATIONS =====
+-- ===== 5. GIẢM PHYSICS CALCULATIONS =====
 local function ReducePhysics()
     if Config.ReducePhysics then
         print("⚙️ Đang giảm physics...")
@@ -325,7 +200,7 @@ local function ReducePhysics()
                     break
                 end
             end
-            
+
             if not isPlayerPart and obj:IsA("BasePart") then
                 if obj:FindFirstChild("BodyVelocity") or obj:FindFirstChild("BodyGyro") or
                    obj:FindFirstChild("BodyPosition") then
@@ -338,7 +213,7 @@ local function ReducePhysics()
     end
 end
 
--- ===== 7. MEMORY CLEANUP =====
+-- ===== 6. MEMORY CLEANUP =====
 local function CleanupMemory()
     print("🧹 Đang dọn dẹp bộ nhớ...")
 
@@ -350,42 +225,12 @@ local function CleanupMemory()
     print("✅ Bộ nhớ đã được dọn dẹp")
 end
 
--- ===== 8. TỐI ƯU CHO CHARACTER CỦA PLAYER =====
-local function OptimizeCharacter(character)
-    if character then
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid and Config.ReduceAnimationQuality then
-            for _, track in pairs(humanoid:GetPlayingAnimationTracks()) do
-                track:AdjustSpeed(0.8)
-            end
-        end
-    end
-end
-
--- ===== 9. THEO DÕI NGƯỜI CHƠI MỚI (Giữ nguyên họ) =====
-local function SetupPlayerTracking()
-    -- Theo dõi người chơi mới tham gia
-    Players.PlayerAdded:Connect(function(newPlayer)
-        newPlayer.CharacterAdded:Connect(function(newCharacter)
-            -- KHÔNG làm gì với người chơi khác - giữ nguyên hoàn toàn
-            print("👥 Người chơi mới: " .. newPlayer.Name .. " - GIỮ NGUYÊN")
-        end)
-    end)
-    
-    -- Giữ nguyên tất cả người chơi hiện tại (trừ bạn)
-    for _, otherPlayer in pairs(Players:GetPlayers()) do
-        if otherPlayer ~= Player then
-            print("👥 Người chơi: " .. otherPlayer.Name .. " - GIỮ NGUYÊN")
-        end
-    end
-end
-
 -- ===== KHỞI ĐỘNG SCRIPT =====
 local function Initialize()
     print("=" .. string.rep("=", 50))
     print("🚀 ROBLOX SIÊU LAG FIX CHO REALME C11")
     print("📱 Tối ưu đặc biệt cho RAM 2GB")
-    print("👤 Bạn: MÀU TRẮNG + TẮT ĐẦU | Người khác: GIỮ NGUYÊN")
+    print("🎯 Tập trung vào hiệu suất, không thay đổi nhân vật")
     print("=" .. string.rep("=", 50))
 
     -- Chạy các tối ưu
@@ -405,21 +250,6 @@ local function Initialize()
     task.wait(0.5)
 
     CleanupMemory()
-    
-    -- Setup theo dõi người chơi
-    SetupPlayerTracking()
-
-    -- Đổi skin của BẠN thành màu trắng và TẮT ĐẦU
-    if Player.Character then
-        RemoveMyPlayerTextures(Player.Character)
-        OptimizeCharacter(Player.Character)
-    end
-
-    Player.CharacterAdded:Connect(function(character)
-        task.wait(1)
-        RemoveMyPlayerTextures(character) -- Chỉ đổi màu BẠN và TẮT ĐẦU
-        OptimizeCharacter(character)
-    end)
 
     -- Cleanup định kỳ
     task.spawn(function()
@@ -430,8 +260,6 @@ local function Initialize()
 
     print("=" .. string.rep("=", 50))
     print("✅ TỐI ƯU HOÀN TẤT!")
-    print("👤 Nhân vật của BẠN: MÀU TRẮNG + KHÔNG ĐẦU 👻")
-    print("👥 Người chơi KHÁC: GIỮ NGUYÊN ĐẦU + MÀU 🎨")
     print("📊 FPS sẽ cải thiện đáng kể")
     print("💡 Nếu vẫn lag, hãy tắt các app khác")
     print("=" .. string.rep("=", 50))
