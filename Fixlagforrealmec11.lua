@@ -14,7 +14,7 @@ local Camera = Workspace.CurrentCamera
 
 -- ===== CẤU HÌNH TỐI ƯU =====
 local Config = {
-    RenderDistance = 200,
+    RenderDistance = 300,
     UpdateInterval = 0.5,
     EnableDynamicCulling = true,
     MaxVisibleParts = 1000
@@ -85,7 +85,7 @@ local function OptimizePart(obj)
     -- Xóa texture trên MeshPart
     if obj:IsA("MeshPart") then
         obj.TextureID = ""
-        pcall(function() obj.RenderFidelity = Enum.RenderFidelity.Performance end)
+        -- Xóa dòng RenderFidelity vì gây lỗi
     end
     
     -- Xóa decals và textures
@@ -186,12 +186,10 @@ local function OptimizeTerrain()
     
     local terrain = Workspace:FindFirstChildOfClass("Terrain")
     if terrain then
-        terrain.Decoration = false
-        terrain.WaterReflectance = 0
-        terrain.WaterTransparency = 0.5
-        terrain.WaterWaveSize = 0
-        terrain.WaterWaveSpeed = 0
-        pcall(function() terrain.WaterColor = Color3.fromRGB(12, 84, 91) end)
+        pcall(function() terrain.WaterReflectance = 0 end)
+        pcall(function() terrain.WaterTransparency = 0.5 end)
+        pcall(function() terrain.WaterWaveSize = 0 end)
+        pcall(function() terrain.WaterWaveSpeed = 0 end)
     end
     
     print("✅ Terrain đã tối ưu")
@@ -201,8 +199,9 @@ end
 local function OptimizeMemory()
     print("🧹 Tối ưu bộ nhớ...")
     
-    -- Dọn rác
-    collectgarbage("collect")
+    -- Kiểm tra memory usage
+    local memBefore = gcinfo()
+    print("📊 Memory hiện tại: " .. math.floor(memBefore) .. " KB")
     
     -- Giảm preload content
     pcall(function()
@@ -265,11 +264,12 @@ local function Initialize()
     
     OptimizeMemory()
     
-    -- Dọn rác định kỳ
+    -- Kiểm tra memory định kỳ (không dọn rác nữa vì Roblox không cho phép)
     task.spawn(function()
         while true do
             task.wait(60)
-            collectgarbage("collect")
+            local mem = gcinfo()
+            print("💾 Memory: " .. math.floor(mem) .. " KB")
         end
     end)
     
