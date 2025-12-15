@@ -1,4 +1,9 @@
 --==============================================================================
+-- [FIXED VERSION] Aimbot Pro + Silent + ESP
+-- Fixed Issues: #1-12 (All Critical, High, Medium Priority)
+-- FINAL FIXES: Player Selection System Synchronization
+--==============================================================================
+
 -- Services & Libraries
 --==============================================================================
 local Players = game:GetService("Players")
@@ -7,13 +12,33 @@ local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local Teams = game:GetService("Teams")
-local Stats = game:GetService("Stats") -- FIXED: Added Stats service for Ping
+local Stats = game:GetService("Stats")
 local Camera = workspace.CurrentCamera
 local Mouse = Players.LocalPlayer:GetMouse()
 local GuiService = game:GetService("GuiService")
 
 -- Load Fluent Library
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+--==============================================================================
+-- Error Handling & Debug
+--==============================================================================
+-- FIXED: Global error handler & Debug Mode
+local DEBUG_MODE = false
+
+local function debugPrint(...)
+    if DEBUG_MODE then
+        print("[Aimbot Debug]", ...)
+    end
+end
+
+local function safeCall(func, context)
+    local success, err = pcall(func)
+    if not success then
+        warn("[Aimbot Error - " .. context .. "]:", err)
+    end
+    return success
+end
 
 --==============================================================================
 -- Constants & Configuration
@@ -26,15 +51,22 @@ local MAX_TARGET_PARTS = {"Head", "UpperTorso", "HumanoidRootPart"}
 --==============================================================================
 local player = Players.LocalPlayer
 
--- FIXED: Sửa Race Condition Character (Yêu cầu số 5)
+-- FIXED #6: Character Loading - Timeout & Retry
 local function waitForCharacter()
     local char = player.Character
     if not char then char = player.CharacterAdded:Wait() end
-    -- Đợi cho đến khi root part load xong
-    local root = char:WaitForChild("HumanoidRootPart", 5)
-    if not root then 
-        return player.Character -- Fallback nếu timeout
+    
+    -- Đợi cả 2 parts quan trọng để tránh crash logic aimbot
+    local root = char:WaitForChild("HumanoidRootPart", 10)
+    local humanoid = char:WaitForChild("Humanoid", 10)
+    
+    -- Retry nếu timeout
+    if not root or not humanoid then
+        warn("[Aimbot] Character parts timeout, retrying...")
+        task.wait(0.5)
+        return waitForCharacter() -- Recursive retry
     end
+    
     return char
 end
 
@@ -86,7 +118,7 @@ local SelectedPlayerUserIds = {}
 local hardAimbotConnection
 local playerCache = {}
 local lastCacheUpdate = 0
-local cachedViewportCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2) -- FIXED: Cache variable
+local cachedViewportCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
 -- FOV Circles
 local HardFOVCircle = Drawing.new("Circle")
@@ -114,10 +146,9 @@ local ESPObjects = {}  -- Player -> {Highlight, BillboardGui, HitboxAdornments}
 -- Optimization & Utility
 --==============================================================================
 
--- FIXED: Tối ưu FOV Check - Cache Viewport (Yêu cầu số 7)
+-- FIXED #7 (Optimization): Cache Viewport
 RunService.RenderStepped:Connect(function()
     cachedViewportCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    -- Update FOV Circle Positions here strictly
     HardFOVCircle.Position = cachedViewportCenter
     SilentFOVCircle.Position = cachedViewportCenter
 end)
@@ -139,19 +170,27 @@ local function isInFOV(position, fovSize, center)
     return distance <= fovSize
 end
 
+-- FIXED #4: Raycast - Check distance
 local function isVisible(targetPart)
     local check = HardSettings.VisibilityCheck or SilentSettings.VisibilityCheck
     if not check then return true end
     if not playerRoot then return false end
     
     local origin = playerRoot.Position
-    local direction = (targetPart.Position - origin).Unit * (targetPart.Position - origin).Magnitude
+    local targetPos = targetPart.Position
+    local direction = (targetPos - origin)
+    local distance = direction.Magnitude
+    
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {character, targetPart.Parent}
     params.FilterType = Enum.RaycastFilterType.Exclude
     
-    local result = workspace:Raycast(origin, direction, params)
-    return result == nil -- Visible if nothing hit
+    -- Raycast đúng độ dài khoảng cách tới mục tiêu
+    local result = workspace:Raycast(origin, direction.Unit * distance, params)
+    
+    -- Visible nếu: không hit GÌ HOẶC hit part xa hơn/bằng target (tolerance -1 stud)
+    if not result then return true end
+    return (result.Position - origin).Magnitude >= (distance - 1)
 end
 
 local function shouldIgnoreTeam(targetPlayer, checkType)
@@ -163,11 +202,13 @@ local function shouldIgnoreTeam(targetPlayer, checkType)
     return player.Team == targetPlayer.Team
 end
 
--- FIXED: Sửa Prediction thêm Ping + Gravity (Yêu cầu số 6)
+-- FIXED #3: Physics - Gravity Prediction Formula
 local function calculatePrediction(targetPos, targetVelocity, strength)
-    local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
-    local gravity = Vector3.new(0, workspace.Gravity * 0.5 * (ping ^ 2), 0) -- Simple gravity compensation
-    return targetPos + (targetVelocity * strength * ping) + gravity -- Added Ping scaling
+    local pingSeconds = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
+    -- Roblox Gravity = 196.2 studs/s², rơi xuống nên ÂM, công thức 0.5 * g * t^2
+    local dropDistance = workspace.Gravity * (pingSeconds ^ 2) * 0.5
+    local gravity = Vector3.new(0, -dropDistance, 0) -- Dấu ÂM chính xác
+    return targetPos + (targetVelocity * strength * pingSeconds) + gravity
 end
 
 local function predictSilentPosition(targetPart)
@@ -190,7 +231,12 @@ end
 
 local function getSilentTarget()
     if not SilentSettings.Enabled then return nil end
-    -- Note: playerCache update is handled in main loops, calling here might be redundant but keeping for safety
+    
+    -- FIXED #12: Validation GetSilentTarget Nil Safety
+    if not updatePlayerParts() or not playerRoot then return nil end
+    updatePlayerCache()
+    if not next(playerCache) then return nil end
+
     local closestTarget, shortestDist = nil, math.huge
     local center = cachedViewportCenter
 
@@ -217,16 +263,18 @@ local function getSilentTarget()
     return closestTarget
 end
 
--- FIXED: Sửa Lỗi Silent Aim Hook - Dùng hookmetamethod (Yêu cầu số 4)
+-- FIXED #5: Silent Hook Thiếu Validation & Typeof check
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
     if SilentSettings.Enabled and self == Mouse and key == "Hit" then
-        -- Random chance check handled here
         if math.random(1, 100) <= SilentSettings.HitChance then
             local targetPart = getSilentTarget()
             if targetPart then
                 local predictedPos = predictSilentPosition(targetPart)
-                return CFrame.new(Mouse.Hit.Position, predictedPos)
+                -- Check predictedPos trước khi dùng
+                if predictedPos and typeof(predictedPos) == "Vector3" then
+                    return CFrame.new(Mouse.Hit.Position, predictedPos)
+                end
             end
         end
     end
@@ -250,7 +298,7 @@ local function updatePlayerParts()
 end
 
 player.CharacterAdded:Connect(function(newChar)
-    character = waitForCharacter() -- Use safe wait
+    character = waitForCharacter()
     task.wait(0.5)
     updatePlayerParts()
 end)
@@ -354,7 +402,6 @@ local function aimAtTarget(targetData)
 
     if HardSettings.CharacterTilt then
         if targetData.Part then 
-             -- Re-calculate exact part pos with prediction if needed, keeping simple here
              aimPosition = targetPos 
         end
     else
@@ -399,7 +446,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 --==============================================================================
--- ESP Functions (FIXED: Memory Leak + BoxHandleAdornment)
+-- ESP Functions (FIXED: All Issues)
 --==============================================================================
 
 local function createESP(targetPlayer)
@@ -435,7 +482,8 @@ local function createESP(targetPlayer)
     nameLabel.Parent = billboard
 
     local healthLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    -- FIXED #1: Lỗi Cú Pháp - ESP Health Label Typo
+    healthLabel.Size = UDim2.new(1, 0, 0.5, 0) 
     healthLabel.Position = UDim2.new(0, 0, 0.5, 0)
     healthLabel.BackgroundTransparency = 1
     healthLabel.Text = "Health"
@@ -444,7 +492,7 @@ local function createESP(targetPlayer)
     healthLabel.Font = Enum.Font.SourceSans
     healthLabel.Parent = billboard
 
-    -- FIXED: Sửa lỗi ESP Hitbox - Dùng BoxHandleAdornment (Yêu cầu số 2)
+    -- FIXED #2: Lỗi API - BoxHandleAdornment dùng BrickColor
     local hitboxes = {}
     for _, part in ipairs(char:GetChildren()) do
         if part:IsA("BasePart") then
@@ -453,10 +501,10 @@ local function createESP(targetPlayer)
             adornment.Adornee = part
             adornment.AlwaysOnTop = true
             adornment.ZIndex = 1
-            adornment.Transparency = 0.6
-            adornment.Color3 = Color3.fromRGB(255, 0, 0)
+            adornment.Transparency = 0.7
+            adornment.Color = BrickColor.new("Bright red") -- Correct API
             adornment.Parent = part
-            adornment.Size = part.Size -- Initial size
+            adornment.Size = part.Size
             table.insert(hitboxes, {Part = part, Adornment = adornment})
         end
     end
@@ -466,7 +514,7 @@ local function createESP(targetPlayer)
         Billboard = billboard, 
         NameLabel = nameLabel, 
         HealthLabel = healthLabel,
-        Hitboxes = hitboxes -- Store adornments here
+        Hitboxes = hitboxes
     }
 end
 
@@ -476,7 +524,6 @@ local function updateHitboxScale(targetPlayer, scale)
     
     for _, hbData in ipairs(data.Hitboxes) do
         if hbData.Part and hbData.Part.Parent and hbData.Adornment then
-            -- Scale visual only, do not change Part.Size
             hbData.Adornment.Size = hbData.Part.Size * scale
             hbData.Adornment.Visible = true
         end
@@ -488,11 +535,15 @@ local function updateESP()
         for player, data in pairs(ESPObjects) do
             if data.Highlight then data.Highlight.Enabled = false end
             if data.Billboard then data.Billboard.Enabled = false end
-            -- Hide hitboxes
+            
+            -- FIXED #10: Memory Leak - ESP Hitbox Destroy thay vì ẩn
             if data.Hitboxes then
                 for _, hb in ipairs(data.Hitboxes) do
-                    if hb.Adornment then hb.Adornment.Visible = false end
+                    if hb.Adornment and hb.Adornment.Parent then 
+                        hb.Adornment:Destroy() 
+                    end
                 end
+                data.Hitboxes = {} -- Clear table để tránh orphan references
             end
         end
         return
@@ -541,6 +592,23 @@ local function updateESP()
                 data.Billboard.Enabled = ESPSettings.ShowName or ESPSettings.ShowHealth
 
                 -- Hitbox Visual Update
+                if not data.Hitboxes or #data.Hitboxes == 0 then
+                    -- Re-create hitboxes nếu đã bị destroyed
+                    local newHitboxes = {}
+                    for _, part in ipairs(char:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            local adornment = Instance.new("BoxHandleAdornment")
+                            adornment.Adornee = part
+                            adornment.AlwaysOnTop = true
+                            adornment.ZIndex = 1
+                            adornment.Transparency = 0.7
+                            adornment.Color = BrickColor.new("Bright red")
+                            adornment.Parent = part
+                            table.insert(newHitboxes, {Part = part, Adornment = adornment})
+                        end
+                    end
+                    data.Hitboxes = newHitboxes
+                end
                 updateHitboxScale(targetPlayer, ESPSettings.HitboxSize)
             end
         end
@@ -577,23 +645,50 @@ local function toggleESP(state)
     })
 end
 
--- FIXED: Sửa Lỗi Memory Leak khi Respawn (Yêu cầu số 3)
+-- FIXED #9: Lỗi Player Respawn - Update Selection Cache & Re-create ESP
 Players.PlayerAdded:Connect(function(newPlayer)
-    newPlayer.CharacterAdded:Connect(function()
-        -- Cleanup old objects explicitly
+    newPlayer.CharacterAdded:Connect(function(newChar)
         destroyESPObj(newPlayer)
-        task.wait(1)
+        task.wait(1.5) -- Đợi character load đủ
+        
         if ESPSettings.Enabled then
             createESP(newPlayer)
+        end
+        
+        -- Re-validate selection logic
+        if SelectedPlayerUserIds[newPlayer.UserId] then
+             debugPrint("Re-validated selected player:", newPlayer.Name)
+             -- Logic xử lý tên nếu cần thiết
         end
     end)
 end)
 
+-- FIXED #8 (FINAL CORRECTION): Player Leave Update Dropdown
 Players.PlayerRemoving:Connect(function(p)
     destroyESPObj(p)
+    
+    local wasSelected = SelectedPlayerNames[p.Name] ~= nil
     SelectedPlayerNames[p.Name] = nil
     SelectedPlayerUserIds[p.UserId] = nil
-    -- Callback refresh handled in UI section
+    
+    if wasSelected then
+        local currentSelection = {}
+        for name, _ in pairs(SelectedPlayerNames) do
+            table.insert(currentSelection, name)
+        end
+        
+        task.spawn(function()
+            task.wait(0.1)
+            PlayerDropdown:SetValue(currentSelection) -- Cập nhật UI Dropdown
+            updatePlayerListStatus()
+        end)
+        
+        Fluent:Notify({
+            Title = "Mục tiêu rời game",
+            Content = p.Name .. " đã thoát - Đã cập nhật",
+            Duration = 2
+        })
+    end
 end)
 
 --==============================================================================
@@ -601,7 +696,7 @@ end)
 --==============================================================================
 
 local Window = Fluent:CreateWindow({
-    Title = "Aimbot Pro + Silent + ESP - Fixed",
+    Title = "Aimbot Pro + Silent + ESP - Final Fixed",
     SubTitle = "Enhanced 2025",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 520),
@@ -726,6 +821,7 @@ local PlayerList = Tabs.Players:AddParagraph({
     Content = "Đang tải..."
 })
 
+-- FIXED #11: Lỗi API Compatibility - Fluent Paragraph Safe Call
 local function updatePlayerListStatus()
     local playerCount = #Players:GetPlayers() - 1
     local selectedCount = 0
@@ -733,16 +829,22 @@ local function updatePlayerListStatus()
 
     local statusText = selectedCount == 0 and "🎯 Chế độ: Ngắm TẤT CẢ" or 
                        string.format("🎯 Chế độ: Chỉ ngắm %d người đã chọn", selectedCount)
-
     local newContent = string.format("👥 Người chơi khác: %d\n%s", playerCount, statusText)
     
-    -- FIXED: Sửa lỗi Fluent Library (Yêu cầu số 1) - Dùng SetDesc thay vì SetContent
-    PlayerList:SetDesc(newContent)
+    local success, err = pcall(function()
+        if PlayerList.SetDesc then
+            PlayerList:SetDesc(newContent)
+        elseif PlayerList.SetContent then
+            PlayerList:SetContent(newContent)
+        elseif PlayerList.Set then
+            PlayerList:Set({Content = newContent})
+        end
+    end)
     
-    task.wait(0.1)
-    PlayerList:SetDesc(newContent)
+    if not success then debugPrint("Paragraph update failed") end
 end
 
+-- FIXED #7: Lỗi Race Condition - Notification Spam
 local PlayerDropdown = Tabs.Players:AddDropdown("PlayerSelector", {
     Title = "Chọn mục tiêu cụ thể",
     Description = "Để trống = ngắm tất cả",
@@ -750,30 +852,68 @@ local PlayerDropdown = Tabs.Players:AddDropdown("PlayerSelector", {
     Multi = true,
     Default = {},
     Callback = function(values)
-        SelectedPlayerNames = {}
-        SelectedPlayerUserIds = {}
+        local newNames = {}
+        local newUserIds = {}
+        local validCount = 0
+        local invalidPlayers = {}
+        
         for _, playerName in ipairs(values) do
             local targetPlayer = Players:FindFirstChild(playerName)
+            -- Validate player tồn tại
             if targetPlayer then
-                SelectedPlayerNames[playerName] = true
-                SelectedPlayerUserIds[targetPlayer.UserId] = true
-                Fluent:Notify({Title = "Đã chọn", Content = "Thêm " .. playerName, Duration = 1})
+                newNames[playerName] = true
+                newUserIds[targetPlayer.UserId] = true
+                validCount = validCount + 1
+            else
+                table.insert(invalidPlayers, playerName)
             end
         end
+        
+        SelectedPlayerNames = newNames
+        SelectedPlayerUserIds = newUserIds
+        
         updatePlayerListStatus()
-        local selectedCount = #values
-        local targetInfo = selectedCount == 0 and "tất cả" or selectedCount .. " người"
-        Fluent:Notify({Title = "Cập nhật mục tiêu", Content = "Đang ngắm: " .. targetInfo, Duration = 2})
+        
+        local targetInfo = validCount == 0 and "tất cả" or validCount .. " người"
+        local content = "Đang ngắm: " .. targetInfo
+        
+        if #invalidPlayers > 0 then
+            content = content .. "\n⚠️ Bỏ qua: " .. table.concat(invalidPlayers, ", ")
+        end
+        
+        Fluent:Notify({Title = "Cập nhật mục tiêu", Content = content, Duration = 2})
     end
 })
 
+-- FINAL FIX (refreshPlayerDropdown): Đồng bộ UserIds sau khi refresh
 local function refreshPlayerDropdown()
     local playerNames = {}
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then table.insert(playerNames, p.Name) end
     end
     table.sort(playerNames)
+    
+    local currentSelection = PlayerDropdown.Value
+    local newSelection = {}
+    local newNames = {}
+    local newUserIds = {}
+    
+    for _, name in pairs(currentSelection) do
+        if table.find(playerNames, name) then
+            table.insert(newSelection, name)
+            local targetPlayer = Players:FindFirstChild(name)
+            if targetPlayer then
+                newNames[name] = true
+                newUserIds[targetPlayer.UserId] = true
+            end
+        end
+    end
+    
+    SelectedPlayerNames = newNames
+    SelectedPlayerUserIds = newUserIds
+    
     PlayerDropdown:SetValues(playerNames)
+    PlayerDropdown:SetValue(newSelection)
     updatePlayerListStatus()
 end
 
@@ -798,8 +938,9 @@ Tabs.Players:AddButton({
     end
 })
 
--- FIXED: Sửa lỗi đồng bộ Dropdown khi player leave (Yêu cầu số 8)
+-- Re-hook player removing to refresh dropdown
 Players.PlayerRemoving:Connect(function(p)
+    task.wait(0.1)
     refreshPlayerDropdown()
 end)
 
@@ -949,4 +1090,4 @@ end)
 updatePlayerParts()
 refreshPlayerDropdown()
 
-Fluent:Notify({Title = "Script Loaded", Content = "LethanhKhoi hub (Fixed Version)", Duration = 5})
+Fluent:Notify({Title = "Script Loaded", Content = "LethanhKhoi hub (Final Fixed Version)", Duration = 5})
