@@ -19,7 +19,7 @@ local on = true
 -- Cài đặt Aimbot (Camlock)
 local aimbotOn = false
 local aimbotTarget = nil
-local SMOOTHNESS = 0.5 -- Độ mượt của Camlock (0.1 đến 1)
+local SMOOTHNESS = 1 -- Độ mượt của Camlock (0.1 đến 1)
 local PREDICTION_SPEED = 120 -- Tốc độ bay của súng/dao (chỉnh cao hơn nếu ngắm bị lố về phía trước)
 
 -- Vòng FOV
