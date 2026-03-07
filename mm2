@@ -1,14 +1,13 @@
 --[[
-    MM2 ESP v5.0 - ESP + Predictive Aimbot + FOV
-    Đã xoá Hitbox & Silent Aim theo yêu cầu.
-    Thêm Aimbot có tính toán hướng di chuyển (Prediction) để dễ trúng mục tiêu đang chạy.
+    MM2 ESP v5.1 - ESP + Predictive Aimbot + Static FOV + Gun Drop ESP
+    - Sửa FOV đứng im giữa màn hình.
+    - Thêm tính năng định vị súng (Gun Drop ESP) khi Sheriff chết.
     - Phím: E = Bật/Tắt Aimbot
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
@@ -16,13 +15,13 @@ local esp = {}
 local roleCache = {}
 local on = true
 
--- Cài đặt Aimbot (Camlock)
+-- ===== CÀI ĐẶT AIMBOT & PREDICTION =====
 local aimbotOn = false
 local aimbotTarget = nil
-local SMOOTHNESS = 1 -- Độ mượt của Camlock (0.1 đến 1)
-local PREDICTION_SPEED = 120 -- Tốc độ bay của súng/dao (chỉnh cao hơn nếu ngắm bị lố về phía trước)
+local SMOOTHNESS = 1 -- Độ mượt của Camlock
+local PREDICTION_SPEED = 120 -- Tốc độ đạn/dao để dự đoán hướng đi
 
--- Vòng FOV
+-- ===== VÒNG FOV (CỐ ĐỊNH) =====
 local showFOV = true
 local fovRadius = 150
 local fovCircle = Drawing.new("Circle")
@@ -31,7 +30,6 @@ fovCircle.Radius = fovRadius
 fovCircle.Color = Color3.fromRGB(255, 255, 255)
 fovCircle.Thickness = 1.5
 fovCircle.Filled = false
-fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
 local FONT = Enum.Font.GothamBold
 
@@ -42,10 +40,11 @@ local colors = {
     Innocent = Color3.fromRGB(0, 255, 100),
 }
 
--- Cập nhật FOV Circle theo màn hình
+-- Cập nhật FOV Circle cố định ở tâm màn hình
 RunService.RenderStepped:Connect(function()
     if fovCircle then
-        fovCircle.Position = UserInputService:GetMouseLocation()
+        -- Đặt FOV luôn ở chính giữa màn hình
+        fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     end
 end)
 
@@ -112,12 +111,12 @@ local function getDistance(p)
     return (mr.Position - tr.Position).Magnitude
 end
 
--- ===== PREDICTIVE AIMBOT =====
+-- ===== PREDICTIVE AIMBOT TỪ TÂM MÀN HÌNH =====
 local function getAimbotTarget()
     local myRole = getMyRole()
     local closestDist = fovRadius
     local target = nil
-    local mousePos = UserInputService:GetMouseLocation()
+    local centerPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
@@ -128,7 +127,8 @@ local function getAimbotTarget()
                 local hrp = p.Character.HumanoidRootPart
                 local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
                 if onScreen then
-                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                    -- Tính khoảng cách từ địch đến TÂM MÀN HÌNH
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
                     if dist < closestDist then
                         closestDist = dist
                         target = p
@@ -159,19 +159,63 @@ RunService:BindToRenderStep("MM2_Aimbot", Enum.RenderPriority.Camera.Value + 1, 
             local predictionTime = dist / PREDICTION_SPEED
             local predictedPos = tp.Position + (tp.Velocity * predictionTime)
             
-            -- Camlock mượt mà vào vị trí dự đoán
             local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, predictedPos)
             Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, SMOOTHNESS)
         end
     end
 end)
 
-local function disableAimbot()
-    aimbotOn = false
-    aimbotTarget = nil
+-- ===== GUN DROP ESP (ĐỊNH VỊ SÚNG) =====
+local activeGunESPs = {}
+
+local function createGunDropESP(gunModel)
+    if not gunModel then return end
+    local mainPart = gunModel:FindFirstChild("Part") or gunModel:FindFirstChildWhichIsA("BasePart") or gunModel
+    if not mainPart then return end
+
+    local hl = Instance.new("Highlight")
+    hl.FillColor = Color3.fromRGB(0, 255, 255)
+    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+    hl.FillTransparency = 0.3
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent = gunModel
+
+    local bill = Instance.new("BillboardGui")
+    bill.Adornee = mainPart
+    bill.Size = UDim2.new(0, 150, 0, 50)
+    bill.StudsOffset = Vector3.new(0, 2, 0)
+    bill.AlwaysOnTop = true
+    bill.Parent = mainPart
+
+    local txt = Instance.new("TextLabel")
+    txt.Size = UDim2.new(1, 0, 1, 0)
+    txt.BackgroundTransparency = 1
+    txt.Text = "[ SÚNG RỚT ]"
+    txt.TextColor3 = Color3.fromRGB(0, 255, 255)
+    txt.TextStrokeTransparency = 0.2
+    txt.TextScaled = true
+    txt.Font = FONT
+    txt.Parent = bill
+
+    table.insert(activeGunESPs, {hl = hl, bill = bill, model = gunModel})
 end
 
--- ===== ESP =====
+-- Lắng nghe súng rớt trong Map
+workspace.ChildAdded:Connect(function(child)
+    if child.Name == "GunDrop" then
+        task.wait(0.1) -- Đợi model load xong
+        createGunDropESP(child)
+    end
+end)
+
+-- Hiển thị súng nếu nó đã rớt sẵn trước khi bật Script
+for _, child in pairs(workspace:GetChildren()) do
+    if child.Name == "GunDrop" then
+        createGunDropESP(child)
+    end
+end
+
+-- ===== PLAYER ESP =====
 local function addESP(p)
     if p == player then return end
     if esp[p] then
@@ -303,14 +347,21 @@ local btnAim    = makeBtn("[Aim: OFF]", Color3.fromRGB(120,120,120),  3, 100)
 makeSep(4)
 local btnFOV    = makeBtn("[FOV: ON]",  Color3.fromRGB(0, 200, 255),  5, 90)
 
--- Nút ESP
+-- Tương tác Nút
 btnESP.MouseButton1Click:Connect(function()
     on = not on
     btnESP.Text = on and "[ESP: ON]" or "[ESP: OFF]"
     btnESP.TextColor3 = on and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(120,120,120)
+    
+    -- Tắt bật luôn cả ESP của súng rớt
+    for _, espData in pairs(activeGunESPs) do
+        if espData.hl and espData.bill then
+            espData.hl.Enabled = on
+            espData.bill.Enabled = on
+        end
+    end
 end)
 
--- Nút FOV
 btnFOV.MouseButton1Click:Connect(function()
     showFOV = not showFOV
     fovCircle.Visible = showFOV
@@ -318,7 +369,6 @@ btnFOV.MouseButton1Click:Connect(function()
     btnFOV.TextColor3 = showFOV and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(120,120,120)
 end)
 
--- Nút Aimbot (Camlock)
 local function updateAimBtn()
     if not aimbotOn then
         btnAim.Text = "[Aim: OFF]"
@@ -331,11 +381,7 @@ end
 
 local function setAimbot(state)
     aimbotOn = state
-    if aimbotOn then
-        aimbotTarget = getAimbotTarget()
-    else
-        disableAimbot()
-    end
+    if aimbotOn then aimbotTarget = getAimbotTarget() else aimbotTarget = nil end
     updateAimBtn()
 end
 btnAim.MouseButton1Click:Connect(function() setAimbot(not aimbotOn) end)
@@ -347,13 +393,12 @@ RunService.Heartbeat:Connect(function(dt)
     if labelTimer >= 0.5 then labelTimer = 0; updateAimBtn() end
 end)
 
--- ===== KEYBIND =====
+-- ===== KEYBIND & DRAG UI =====
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.E then setAimbot(not aimbotOn) end
 end)
 
--- ===== DRAG UI =====
 local dragging, dragOffX, dragOffY, dragInput
 frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -394,4 +439,4 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
-print("MM2 ESP v5.0 | Aimbot Prediction + FOV | Xóa Hitbox & SA thành công!")
+print("MM2 ESP v5.1 | Center FOV + Gun Drop ESP + Predictive Aimbot - OK!")
