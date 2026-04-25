@@ -7,7 +7,7 @@
 
 local Config = {
     ESP = { Enabled = true, MaxDistance = 500, ShowNames = true, ShowRole = true },
-    Aimbot = { Enabled = false, Smoothing = 0.15, Prediction = 0.1 },
+    Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 },
     Hitbox = { Enabled = false, Size = 10, Transparency = 0.6 }, -- Phóng to mục tiêu
     GunDrop = { Enabled = true }
 }
@@ -247,7 +247,7 @@ RunService.RenderStepped:Connect(function()
             -- Xử lý ESP
             if Config.ESP.Enabled and dist < Config.ESP.MaxDistance then
                 local color = role == "Murderer" and Color3.fromRGB(255, 50, 50) or 
-                              role == "Sheriff" and Color3.fromRGB(50, 100, 255) or Color3.fromRGB(150, 150, 150)
+                              role == "Sheriff" and Color3.fromRGB(50, 100, 255) or Color3.fromRGB(0, 255, 0)
                 
                 esp.HL.Enabled = true
                 esp.HL.FillColor = color
