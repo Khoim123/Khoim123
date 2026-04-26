@@ -1,13 +1,13 @@
 --[[
-    MM2 VIP v10 - MINI UI & OPTIMIZED
-    - Bỏ Gun ESP.
-    - Giao diện Mini UI nhỏ gọn, đẹp hơn.
-    - Tối ưu FPS cho Mobile.
+    MM2 VIP v10 - MINI UI & REACH CIRCLE (FIX LỖI TRANSPARENCY)
+    - Sửa lỗi "Visible is not a valid member of Part".
+    - Vòng Reach dùng Transparency để ẩn/hiện mượt mà.
 ]]
 
 local Config = {
     ESP = { Enabled = true, MaxDistance = 500 },
-    Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 }
+    Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 },
+    Reach = { Enabled = false, Radius = 15 }
 }
 
 local RunService = game:GetService("RunService")
@@ -20,7 +20,7 @@ local Camera = Workspace.CurrentCamera
 local Cache = { Roles = {}, ESPs = {} }
 local State = { UIVisible = true, AimbotTarget = nil }
 
--- ===== THEME MỚI (MINI & SLEEK) =====
+-- ===== THEME =====
 local Theme = {
     BG_Frame = Color3.fromRGB(12, 12, 25),
     Stroke_Main = Color3.fromRGB(0, 150, 255),
@@ -35,6 +35,25 @@ local Theme = {
     Float_Stroke = Color3.fromRGB(0, 150, 255)
 }
 
+-- ===== TẠO VÒNG REACH VISUAL =====
+if Workspace:FindFirstChild("MM2_ReachCircle") then
+    Workspace.MM2_ReachCircle:Destroy()
+end
+
+local ReachCircle = Instance.new("Part")
+ReachCircle.Name = "MM2_ReachCircle"
+ReachCircle.Shape = Enum.PartType.Cylinder
+ReachCircle.Size = Vector3.new(0.15, Config.Reach.Radius * 2, Config.Reach.Radius * 2)
+ReachCircle.Orientation = Vector3.new(0, 0, 90)
+ReachCircle.Color = Color3.fromRGB(0, 170, 255)
+-- Dùng Transparency = 1 để ẩn (thay vì Visible)
+ReachCircle.Transparency = 1 
+ReachCircle.Material = Enum.Material.ForceField
+ReachCircle.Anchored = true
+ReachCircle.CanCollide = false
+ReachCircle.CastShadow = false
+ReachCircle.Parent = Workspace
+
 -- ===== XÁC ĐỊNH ROLE =====
 local function GetRoleFromTool(name)
     local n = string.lower(name)
@@ -45,6 +64,7 @@ local function GetRoleFromTool(name)
 end
 
 local function UpdateRole(player)
+    if not player or not player.Parent then return end 
     local char = player.Character
     if not char then return end
     local tool = char:FindFirstChildWhichIsA("Tool")
@@ -58,16 +78,26 @@ local function UpdateRole(player)
     Cache.Roles[player] = "Innocent"
 end
 
--- Vòng lặp ngầm cập nhật Role (Chống lag)
 task.spawn(function()
     while task.wait(0.5) do
         for _, p in ipairs(Players:GetPlayers()) do
-            UpdateRole(p)
+            if p.Parent then UpdateRole(p) end
         end
     end
 end)
 
--- ===== AIMBOT THÔNG MINH =====
+Players.PlayerRemoving:Connect(function(player)
+    Cache.Roles[player] = nil
+    if Cache.ESPs[player] then
+        pcall(function()
+            if Cache.ESPs[player].HL then Cache.ESPs[player].HL:Destroy() end
+            if Cache.ESPs[player].Bill then Cache.ESPs[player].Bill:Destroy() end
+        end)
+        Cache.ESPs[player] = nil
+    end
+end)
+
+-- ===== AIMBOT =====
 local function GetTarget()
     local myRole = Cache.Roles[LocalPlayer] or "Innocent"
     if myRole == "Innocent" then return nil end 
@@ -109,7 +139,6 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
--- Nút nổi (Nhỏ hơn)
 local FloatBtn = Instance.new("TextButton")
 FloatBtn.Size = UDim2.new(0, 35, 0, 35)
 FloatBtn.Position = UDim2.new(0, 12, 0.4, 0)
@@ -125,17 +154,15 @@ FloatDot.Size = UDim2.new(0, 10, 0, 10); FloatDot.Position = UDim2.new(0.5, -5, 
 FloatDot.BackgroundColor3 = Theme.Float_Stroke; FloatDot.BorderSizePixel = 0; FloatDot.Parent = FloatBtn
 Instance.new("UICorner", FloatDot).CornerRadius = UDim.new(1, 0)
 
--- Khung chính (Nhỏ gọn hơn)
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 160, 0, 105)
-MainFrame.Position = UDim2.new(0.5, -80, 0.1, 0)
+MainFrame.Size = UDim2.new(0, 235, 0, 105)
+MainFrame.Position = UDim2.new(0.5, -117, 0.1, 0)
 MainFrame.BackgroundColor3 = Theme.BG_Frame
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Color = Theme.Stroke_Main; MainStroke.Thickness = 1.2
 
--- Thanh tiêu đề (Mỏng hơn)
 local TopBar = Instance.new("Frame")
 TopBar.Size = UDim2.new(1, 0, 0, 25); TopBar.BackgroundColor3 = Theme.TopBar; TopBar.BorderSizePixel = 0; TopBar.Parent = MainFrame
 Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 10)
@@ -145,7 +172,6 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 1, 0); Title.BackgroundTransparency = 1; Title.Text = "  MM2 VIP"
 Title.TextColor3 = Color3.fromRGB(220, 235, 255); Title.Font = Enum.Font.GothamBold; Title.TextSize = 12; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = TopBar
 
--- Tạo nút bấm (Thiết kế dẹp, không chữ ON/OFF để tiết kiệm chỗ)
 local function CreateBtn(text, initialState, pos, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 65, 0, 60)
@@ -169,15 +195,16 @@ local function CreateBtn(text, initialState, pos, callback)
     end)
 end
 
--- Vị trí 2 nút (Căn lề đẹp mắt)
 CreateBtn("ESP", Config.ESP.Enabled, UDim2.new(0, 10, 0, 35), function()
     Config.ESP.Enabled = not Config.ESP.Enabled; return Config.ESP.Enabled
 end)
 CreateBtn("AIM", Config.Aimbot.Enabled, UDim2.new(0, 85, 0, 35), function()
     Config.Aimbot.Enabled = not Config.Aimbot.Enabled; return Config.Aimbot.Enabled
 end)
+CreateBtn("RCH", Config.Reach.Enabled, UDim2.new(0, 160, 0, 35), function()
+    Config.Reach.Enabled = not Config.Reach.Enabled; return Config.Reach.Enabled
+end)
 
--- Kéo thả
 local function MakeDraggable(gui)
     local dragging, dragInput, dragStart, startPos
     gui.InputBegan:Connect(function(input)
@@ -203,7 +230,7 @@ end)
 
 -- ===== PLAYER ESP =====
 local function CreateESP(player)
-    if player == LocalPlayer or Cache.ESPs[player] then return end
+    if player == LocalPlayer or Cache.ESPs[player] or not player.Parent then return end
     local char = player.Character
     if not char then return end
     local hrp = char:WaitForChild("HumanoidRootPart", 3)
@@ -217,8 +244,13 @@ local function CreateESP(player)
     Cache.ESPs[player] = { Char = char, HRP = hrp, HL = hl, Bill = bill, Txt = txt }
 end
 
+-- ===== VÒNG LẶP CHÍNH =====
 RunService.RenderStepped:Connect(function()
     local camPos = Camera.CFrame.Position
+    local myChar = LocalPlayer.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    -- Aimbot Logic
     if Config.Aimbot.Enabled then
         State.AimbotTarget = GetTarget()
         if State.AimbotTarget and State.AimbotTarget.Character then
@@ -229,9 +261,33 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
+
+    -- Reach & Circle Logic (Sửa lỗi dùng Transparency thay vì Visible)
+    if Config.Reach.Enabled and myHRP then
+        -- Hiện vòng tròn bằng Transparency
+        ReachCircle.Transparency = 0.75 
+        ReachCircle.CFrame = myHRP.CFrame * CFrame.new(0, -2.5, 0)
+
+        local tool = myChar:FindFirstChildWhichIsA("Tool")
+        if tool then
+            local handle = tool:FindFirstChild("Handle")
+            if handle and handle:IsA("BasePart") and handle.Size.X < Config.Reach.Radius then
+                handle.Size = Vector3.new(Config.Reach.Radius, Config.Reach.Radius, Config.Reach.Radius)
+                handle.Transparency = 1
+                handle.CanCollide = false
+                handle.Massless = true
+            end
+        end
+    else
+        -- Ẩn vòng tròn bằng Transparency = 1
+        ReachCircle.Transparency = 1 
+    end
+
+    -- ESP Logic
     for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer then continue end
+        if p == LocalPlayer or not p.Parent then continue end
         local esp = Cache.ESPs[p]
+        
         if esp and esp.Char and esp.Char.Parent then
             local dist = (camPos - esp.HRP.Position).Magnitude
             local role = Cache.Roles[p] or "Innocent"
@@ -243,8 +299,10 @@ RunService.RenderStepped:Connect(function()
                 esp.HL.Enabled = false; esp.Bill.Enabled = false
             end
         elseif esp then
-            if esp.HL then esp.HL:Destroy() end
-            if esp.Bill then esp.Bill:Destroy() end
+            pcall(function()
+                if esp.HL then esp.HL:Destroy() end
+                if esp.Bill then esp.Bill:Destroy() end
+            end)
             Cache.ESPs[p] = nil
         end
     end
