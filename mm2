@@ -1,27 +1,41 @@
 --[[
-    MM2 VIP v8.0 - MOBILE OPTIMIZED
-    - Floating Toggle: Nút nổi ẩn/hiện UI dễ chạm.
-    - Hitbox Expander: Phóng to mục tiêu cực mượt cho cảm ứng.
-    - ESP Anti-Lag: Giới hạn Render khoảng cách, an toàn RAM.
+    MM2 VIP v10 - MINI UI & OPTIMIZED
+    - Bỏ Gun ESP.
+    - Giao diện Mini UI nhỏ gọn, đẹp hơn.
+    - Tối ưu FPS cho Mobile.
 ]]
 
 local Config = {
-    ESP = { Enabled = true, MaxDistance = 500, ShowNames = true, ShowRole = true },
-    Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 },
-    Hitbox = { Enabled = false, Size = 10, Transparency = 0.6 }, -- Phóng to mục tiêu
-    GunDrop = { Enabled = true }
+    ESP = { Enabled = false, MaxDistance = 500 },
+    Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 }
 }
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local Camera = Workspace.CurrentCamera
 
-local Cache = { Roles = {}, ESPs = {}, GunDrops = {} }
+local Cache = { Roles = {}, ESPs = {} }
 local State = { UIVisible = true, AimbotTarget = nil }
 
--- ===== HỆ THỐNG XÁC ĐỊNH ROLE =====
+-- ===== THEME MỚI (MINI & SLEEK) =====
+local Theme = {
+    BG_Frame = Color3.fromRGB(12, 12, 25),
+    Stroke_Main = Color3.fromRGB(0, 150, 255),
+    TopBar = Color3.fromRGB(0, 100, 220),
+    Btn_Off_BG = Color3.fromRGB(20, 20, 40), 
+    Btn_Off_Stroke = Color3.fromRGB(35, 35, 65), 
+    Btn_Off_Text = Color3.fromRGB(100, 100, 140),
+    Btn_On_BG = Color3.fromRGB(0, 120, 255), 
+    Btn_On_Stroke = Color3.fromRGB(80, 180, 255), 
+    Btn_On_Text = Color3.fromRGB(255, 255, 255),
+    Float_BG = Color3.fromRGB(10, 10, 20), 
+    Float_Stroke = Color3.fromRGB(0, 150, 255)
+}
+
+-- ===== XÁC ĐỊNH ROLE =====
 local function GetRoleFromTool(name)
     local n = string.lower(name)
     if n:find("knife") or n:find("blade") or n:find("dagger") then return "Murderer" end
@@ -35,7 +49,6 @@ local function UpdateRole(player)
     if not char then return end
     local tool = char:FindFirstChildWhichIsA("Tool")
     if tool then Cache.Roles[player] = GetRoleFromTool(tool.Name); return end
-    
     local backpack = player:FindFirstChild("Backpack")
     if backpack then
         for _, t in pairs(backpack:GetChildren()) do
@@ -45,98 +58,132 @@ local function UpdateRole(player)
     Cache.Roles[player] = "Innocent"
 end
 
--- ===== MOBILE UI TẠO BẰNG CODE =====
-local CoreGui = game:GetService("CoreGui")
-if CoreGui:FindFirstChild("MM2MobileVIP") then CoreGui.MM2MobileVIP:Destroy() end
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MM2MobileVIP"
-ScreenGui.ResetOnSpawn = false
-pcall(function() ScreenGui.Parent = CoreGui end)
-if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
-
--- Nút nổi (Floating Button) để mở Menu
-local FloatBtn = Instance.new("TextButton")
-FloatBtn.Size = UDim2.new(0, 50, 0, 50)
-FloatBtn.Position = UDim2.new(0, 10, 0.4, 0)
-FloatBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-FloatBtn.Text = "VIP\nMM2"
-FloatBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
-FloatBtn.Font = Enum.Font.GothamBold
-FloatBtn.TextScaled = true
-FloatBtn.Parent = ScreenGui
-Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
-Instance.new("UIStroke", FloatBtn).Color = Color3.fromRGB(0, 255, 255)
-Instance.new("UIStroke", FloatBtn).Thickness = 2
-
--- Menu chính
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 320, 0, 80)
-MainFrame.Position = UDim2.new(0.5, -160, 0.1, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
-Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(0, 200, 255)
-Instance.new("UIStroke", MainFrame).Thickness = 1.5
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 25)
-Title.BackgroundTransparency = 1
-Title.Text = "MM2 VIP - MOBILE EDITION"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.GothamBold
-Title.Parent = MainFrame
-
-local function CreateBtn(text, state, pos, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 95, 0, 40)
-    btn.Position = pos
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    btn.Text = text
-    btn.TextColor3 = state and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(150, 150, 150)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextScaled = true
-    btn.Parent = MainFrame
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-    btn.MouseButton1Click:Connect(function()
-        local newState = callback()
-        btn.TextColor3 = newState and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(150, 150, 150)
-    end)
-end
-
-CreateBtn("ESP", Config.ESP.Enabled, UDim2.new(0.02, 0, 0.4, 0), function()
-    Config.ESP.Enabled = not Config.ESP.Enabled
-    return Config.ESP.Enabled
+-- Vòng lặp ngầm cập nhật Role (Chống lag)
+task.spawn(function()
+    while task.wait(0.5) do
+        for _, p in ipairs(Players:GetPlayers()) do
+            UpdateRole(p)
+        end
+    end
 end)
 
-CreateBtn("HITBOX", Config.Hitbox.Enabled, UDim2.new(0.34, 0, 0.4, 0), function()
-    Config.Hitbox.Enabled = not Config.Hitbox.Enabled
-    if not Config.Hitbox.Enabled then
-        -- Trả lại kích thước gốc nếu tắt
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                p.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
-                p.Character.HumanoidRootPart.Transparency = 1
+-- ===== AIMBOT THÔNG MINH =====
+local function GetTarget()
+    local myRole = Cache.Roles[LocalPlayer] or "Innocent"
+    if myRole == "Innocent" then return nil end 
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local sheriffTarget, innocentTarget = nil, nil
+    local sheriffDist, innocentDist = 200, 200
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local targetRole = Cache.Roles[p] or "Innocent"
+            local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                if myRole == "Sheriff" and targetRole == "Murderer" and dist < sheriffDist then
+                    sheriffTarget = p; sheriffDist = dist
+                elseif myRole == "Murderer" then
+                    if targetRole == "Sheriff" and dist < sheriffDist then
+                        sheriffTarget = p; sheriffDist = dist
+                    elseif targetRole == "Innocent" and dist < innocentDist then
+                        innocentTarget = p; innocentDist = dist
+                    end
+                end
             end
         end
     end
-    return Config.Hitbox.Enabled
+    if myRole == "Sheriff" then return sheriffTarget end
+    if myRole == "Murderer" then return sheriffTarget or innocentTarget end
+    return nil
+end
+
+-- ===== GIAO DIỆN MINI UI =====
+local CoreGui = game:GetService("CoreGui")
+if CoreGui:FindFirstChild("MM2MiniUI") then CoreGui.MM2MiniUI:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MM2MiniUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+-- Nút nổi (Nhỏ hơn)
+local FloatBtn = Instance.new("TextButton")
+FloatBtn.Size = UDim2.new(0, 35, 0, 35)
+FloatBtn.Position = UDim2.new(0, 12, 0.4, 0)
+FloatBtn.BackgroundColor3 = Theme.Float_BG
+FloatBtn.Text = ""
+FloatBtn.AutoButtonColor = false
+FloatBtn.Parent = ScreenGui
+Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
+local FloatStroke = Instance.new("UIStroke", FloatBtn)
+FloatStroke.Color = Theme.Float_Stroke; FloatStroke.Thickness = 1.5
+local FloatDot = Instance.new("Frame")
+FloatDot.Size = UDim2.new(0, 10, 0, 10); FloatDot.Position = UDim2.new(0.5, -5, 0.5, -5)
+FloatDot.BackgroundColor3 = Theme.Float_Stroke; FloatDot.BorderSizePixel = 0; FloatDot.Parent = FloatBtn
+Instance.new("UICorner", FloatDot).CornerRadius = UDim.new(1, 0)
+
+-- Khung chính (Nhỏ gọn hơn)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 160, 0, 105)
+MainFrame.Position = UDim2.new(0.5, -80, 0.1, 0)
+MainFrame.BackgroundColor3 = Theme.BG_Frame
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Theme.Stroke_Main; MainStroke.Thickness = 1.2
+
+-- Thanh tiêu đề (Mỏng hơn)
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 25); TopBar.BackgroundColor3 = Theme.TopBar; TopBar.BorderSizePixel = 0; TopBar.Parent = MainFrame
+Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 10)
+local TopBarFix = Instance.new("Frame")
+TopBarFix.Size = UDim2.new(1, 0, 0, 10); TopBarFix.Position = UDim2.new(0, 0, 1, -10); TopBarFix.BackgroundColor3 = Theme.TopBar; TopBarFix.BorderSizePixel = 0; TopBarFix.Parent = TopBar
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 1, 0); Title.BackgroundTransparency = 1; Title.Text = "  MM2 VIP"
+Title.TextColor3 = Color3.fromRGB(220, 235, 255); Title.Font = Enum.Font.GothamBold; Title.TextSize = 12; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = TopBar
+
+-- Tạo nút bấm (Thiết kế dẹp, không chữ ON/OFF để tiết kiệm chỗ)
+local function CreateBtn(text, initialState, pos, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 65, 0, 60)
+    btn.Position = pos
+    btn.BackgroundColor3 = initialState and Theme.Btn_On_BG or Theme.Btn_Off_BG
+    btn.Text = text
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.TextColor3 = initialState and Theme.Btn_On_Text or Theme.Btn_Off_Text
+    btn.AutoButtonColor = false
+    btn.Parent = MainFrame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    local btnStroke = Instance.new("UIStroke", btn)
+    btnStroke.Color = initialState and Theme.Btn_On_Stroke or Theme.Btn_Off_Stroke; btnStroke.Thickness = 1.2
+
+    btn.MouseButton1Click:Connect(function()
+        local newState = callback()
+        btn.BackgroundColor3 = newState and Theme.Btn_On_BG or Theme.Btn_Off_BG
+        btn.TextColor3 = newState and Theme.Btn_On_Text or Theme.Btn_Off_Text
+        btnStroke.Color = newState and Theme.Btn_On_Stroke or Theme.Btn_Off_Stroke
+    end)
+end
+
+-- Vị trí 2 nút (Căn lề đẹp mắt)
+CreateBtn("ESP", Config.ESP.Enabled, UDim2.new(0, 10, 0, 35), function()
+    Config.ESP.Enabled = not Config.ESP.Enabled; return Config.ESP.Enabled
+end)
+CreateBtn("AIM", Config.Aimbot.Enabled, UDim2.new(0, 85, 0, 35), function()
+    Config.Aimbot.Enabled = not Config.Aimbot.Enabled; return Config.Aimbot.Enabled
 end)
 
-CreateBtn("AIMBOT", Config.Aimbot.Enabled, UDim2.new(0.66, 0, 0.4, 0), function()
-    Config.Aimbot.Enabled = not Config.Aimbot.Enabled
-    return Config.Aimbot.Enabled
-end)
-
--- Logic Kéo thả (Drag) hỗ trợ mượt cho cảm ứng điện thoại
+-- Kéo thả
 local function MakeDraggable(gui)
     local dragging, dragInput, dragStart, startPos
     gui.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true; dragStart = input.Position; startPos = gui.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
         end
     end)
     gui.InputChanged:Connect(function(input)
@@ -149,69 +196,29 @@ local function MakeDraggable(gui)
         end
     end)
 end
-
-MakeDraggable(FloatBtn)
-MakeDraggable(MainFrame)
-
+MakeDraggable(FloatBtn); MakeDraggable(MainFrame)
 FloatBtn.MouseButton1Click:Connect(function()
-    State.UIVisible = not State.UIVisible
-    MainFrame.Visible = State.UIVisible
+    State.UIVisible = not State.UIVisible; MainFrame.Visible = State.UIVisible
 end)
 
--- ===== HỆ THỐNG ESP & HITBOX (TỐI ƯU MOBILE) =====
+-- ===== PLAYER ESP =====
 local function CreateESP(player)
     if player == LocalPlayer or Cache.ESPs[player] then return end
     local char = player.Character
     if not char then return end
-
     local hrp = char:WaitForChild("HumanoidRootPart", 3)
     if not hrp then return end
-
     local hl = Instance.new("Highlight")
-    hl.FillTransparency = 0.6
-    hl.OutlineTransparency = 0.1
-    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    hl.Parent = char
-
+    hl.FillTransparency = 0.6; hl.OutlineTransparency = 0.1; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = char
     local bill = Instance.new("BillboardGui")
-    bill.Size = UDim2.new(0, 150, 0, 40)
-    bill.StudsOffset = Vector3.new(0, 3, 0)
-    bill.AlwaysOnTop = true
-    bill.Parent = char:WaitForChild("Head", 3)
-
+    bill.Size = UDim2.new(0, 150, 0, 40); bill.StudsOffset = Vector3.new(0, 3, 0); bill.AlwaysOnTop = true; bill.Parent = char:WaitForChild("Head", 3)
     local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.new(1, 0, 1, 0)
-    txt.BackgroundTransparency = 1
-    txt.Font = Enum.Font.GothamBold
-    txt.TextScaled = true
-    txt.TextStrokeTransparency = 0.2
-    txt.Parent = bill
-
+    txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamBold; txt.TextScaled = true; txt.TextStrokeTransparency = 0.2; txt.Parent = bill
     Cache.ESPs[player] = { Char = char, HRP = hrp, HL = hl, Bill = bill, Txt = txt }
 end
 
-local function GetTarget()
-    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local bestTarget, shortestDist = nil, 200
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
-            if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                if dist < shortestDist then shortestDist = dist; bestTarget = p end
-            end
-        end
-    end
-    return bestTarget
-end
-
--- Vòng lặp tối ưu 1 chỗ duy nhất
 RunService.RenderStepped:Connect(function()
     local camPos = Camera.CFrame.Position
-    local myRole = Cache.Roles[LocalPlayer] or "Innocent"
-
-    -- Xử lý Aimbot
     if Config.Aimbot.Enabled then
         State.AimbotTarget = GetTarget()
         if State.AimbotTarget and State.AimbotTarget.Character then
@@ -222,43 +229,18 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
-
-    -- Xử lý ESP & Hitbox
     for _, p in ipairs(Players:GetPlayers()) do
         if p == LocalPlayer then continue end
-        UpdateRole(p)
-
         local esp = Cache.ESPs[p]
-        if esp and esp.Char.Parent then
+        if esp and esp.Char and esp.Char.Parent then
             local dist = (camPos - esp.HRP.Position).Magnitude
             local role = Cache.Roles[p] or "Innocent"
-            
-            -- Xử lý Hitbox (Phóng to người chơi)
-            if Config.Hitbox.Enabled and (role == "Murderer" or role == "Sheriff" or myRole == "Murderer") then
-                esp.HRP.Size = Vector3.new(Config.Hitbox.Size, Config.Hitbox.Size, Config.Hitbox.Size)
-                esp.HRP.Transparency = Config.Hitbox.Transparency
-                esp.HRP.Color = role == "Murderer" and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 0, 255)
-                esp.HRP.CanCollide = false
-            elseif esp.HRP.Size.X > 2 then
-                esp.HRP.Size = Vector3.new(2, 2, 1)
-                esp.HRP.Transparency = 1
-            end
-
-            -- Xử lý ESP
             if Config.ESP.Enabled and dist < Config.ESP.MaxDistance then
-                local color = role == "Murderer" and Color3.fromRGB(255, 50, 50) or 
-                              role == "Sheriff" and Color3.fromRGB(50, 100, 255) or Color3.fromRGB(0, 255, 0)
-                
-                esp.HL.Enabled = true
-                esp.HL.FillColor = color
-                esp.HL.OutlineColor = color
-                
-                esp.Bill.Enabled = true
-                esp.Txt.Text = p.DisplayName .. "\n[" .. role .. "] " .. math.floor(dist) .. "m"
-                esp.Txt.TextColor3 = color
+                local color = role == "Murderer" and Color3.fromRGB(255, 50, 50) or role == "Sheriff" and Color3.fromRGB(50, 100, 255) or Color3.fromRGB(0, 255, 0)
+                esp.HL.Enabled = true; esp.HL.FillColor = color; esp.HL.OutlineColor = color
+                esp.Bill.Enabled = true; esp.Txt.Text = p.DisplayName .. "\n[" .. role .. "] " .. math.floor(dist) .. "m"; esp.Txt.TextColor3 = color
             else
-                esp.HL.Enabled = false
-                esp.Bill.Enabled = false
+                esp.HL.Enabled = false; esp.Bill.Enabled = false
             end
         elseif esp then
             if esp.HL then esp.HL:Destroy() end
@@ -268,12 +250,10 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Khởi tạo ESP cho người đang có mặt
 for _, p in ipairs(Players:GetPlayers()) do 
     if p.Character then CreateESP(p) end
     p.CharacterAdded:Connect(function() task.wait(0.5); CreateESP(p) end)
 end
-
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function() task.wait(0.5); CreateESP(p) end)
 end)
