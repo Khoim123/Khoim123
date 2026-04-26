@@ -6,7 +6,7 @@
 ]]
 
 local Config = {
-    ESP = { Enabled = false, MaxDistance = 500 },
+    ESP = { Enabled = true, MaxDistance = 500 },
     Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 }
 }
 
