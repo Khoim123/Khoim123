@@ -1,83 +1,99 @@
 --[[
-    MM2 VIP v10 - MINI UI & REACH CIRCLE (FIX LỖI TRANSPARENCY)
-    - Sửa lỗi "Visible is not a valid member of Part".
-    - Vòng Reach dùng Transparency để ẩn/hiện mượt mà.
+    MM2 VIP v5.0 - HYBRID POLLING ROLE
+    - FIX: Áp dụng cơ chế Polling quét mỗi 0.5s từ bản v10 (Cực kỳ ổn định).
+    - FIX: Nhận diện Role qua Tool trong Balo ngay lập tức.
+    - Giữ nguyên toàn bộ UI, Sliders, Silent Aim, Reach Fix từ v4.
 ]]
 
 local Config = {
     ESP = { Enabled = true, MaxDistance = 500 },
-    Aimbot = { Enabled = false, Smoothing = 1, Prediction = 0 },
-    Reach = { Enabled = false, Radius = 15 }
+    Aimbot = { Enabled = false, Smoothing = 0.5, Prediction = 0.13, FOV = 150 },
+    Reach = { Enabled = false, Radius = 15 },
+    SilentAim = { Enabled = false },
+    GunCollect = { Enabled = false, Speed = 400 },
+    Tracker = { Enabled = false }
 }
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
-local Cache = { Roles = {}, ESPs = {} }
-local State = { UIVisible = true, AimbotTarget = nil }
+local Cache = { Roles = {}, ESPs = {}, GunDropObj = nil, GunDropESP = nil, OriginalHandleSize = nil, OriginalHandleTool = nil }
+local State = { UIVisible = true, ShuttingDown = false }
 
--- ===== THEME =====
-local Theme = {
-    BG_Frame = Color3.fromRGB(12, 12, 25),
-    Stroke_Main = Color3.fromRGB(0, 150, 255),
-    TopBar = Color3.fromRGB(0, 100, 220),
-    Btn_Off_BG = Color3.fromRGB(20, 20, 40), 
-    Btn_Off_Stroke = Color3.fromRGB(35, 35, 65), 
-    Btn_Off_Text = Color3.fromRGB(100, 100, 140),
-    Btn_On_BG = Color3.fromRGB(0, 120, 255), 
-    Btn_On_Stroke = Color3.fromRGB(80, 180, 255), 
-    Btn_On_Text = Color3.fromRGB(255, 255, 255),
-    Float_BG = Color3.fromRGB(10, 10, 20), 
-    Float_Stroke = Color3.fromRGB(0, 150, 255)
-}
+-- CLEANUP
+local function SafeDestroy(name, parent) local obj = parent:FindFirstChild(name); if obj then pcall(obj.Destroy, obj) end end
+SafeDestroy("MM2VIP_GUI", CoreGui); SafeDestroy("MM2_GrabBtnGui", CoreGui); SafeDestroy("MM2_ShootBtn", CoreGui); SafeDestroy("MM2_ReachCircle", Workspace)
 
--- ===== TẠO VÒNG REACH VISUAL =====
-if Workspace:FindFirstChild("MM2_ReachCircle") then
-    Workspace.MM2_ReachCircle:Destroy()
-end
+-- DRAWING
+local TrackerLine;
+local TrackerSupported, _ = pcall(function() TrackerLine = Drawing.new("Line") end)
+if TrackerSupported and TrackerLine then TrackerLine.Visible = false; TrackerLine.Color = Color3.fromRGB(255, 0, 0); TrackerLine.Thickness = 2; TrackerLine.Transparency = 0.5 end
 
-local ReachCircle = Instance.new("Part")
-ReachCircle.Name = "MM2_ReachCircle"
-ReachCircle.Shape = Enum.PartType.Cylinder
-ReachCircle.Size = Vector3.new(0.15, Config.Reach.Radius * 2, Config.Reach.Radius * 2)
-ReachCircle.Orientation = Vector3.new(0, 0, 90)
-ReachCircle.Color = Color3.fromRGB(0, 170, 255)
--- Dùng Transparency = 1 để ẩn (thay vì Visible)
-ReachCircle.Transparency = 1 
-ReachCircle.Material = Enum.Material.ForceField
-ReachCircle.Anchored = true
-ReachCircle.CanCollide = false
-ReachCircle.CastShadow = false
-ReachCircle.Parent = Workspace
+-- REACH CIRCLE
+local ReachCircle = Instance.new("Part"); ReachCircle.Name = "MM2_ReachCircle"; ReachCircle.Shape = Enum.PartType.Cylinder; ReachCircle.Size = Vector3.new(0.15, Config.Reach.Radius * 2, Config.Reach.Radius * 2); ReachCircle.Orientation = Vector3.new(0, 0, 90); ReachCircle.Color = Color3.fromRGB(0, 170, 255); ReachCircle.Transparency = 1; ReachCircle.Material = Enum.Material.ForceField; ReachCircle.Anchored = true; ReachCircle.CanCollide = false; ReachCircle.CastShadow = false; ReachCircle.Parent = Workspace
 
--- ===== XÁC ĐỊNH ROLE =====
-local function GetRoleFromTool(name)
-    local n = string.lower(name)
-    if n:find("knife") or n:find("blade") or n:find("dagger") then return "Murderer" end
-    if n:find("gun") or n:find("revolver") or n:find("pistol") then return "Sheriff" end
-    if n:find("hero") then return "Hero" end
-    return "Innocent"
+-- ===== ROLE LOGIC (POLLING METHOD TỪ BẢN v10) =====
+local function GetRoleFromTool(tool)
+    if not tool then return nil end
+    if tool:FindFirstChild("KnifeScript") then return "Murderer" end
+    if tool:FindFirstChild("GunScript") then return "Sheriff" end
+    local n = string.lower(tool.Name)
+    if n:find("knife") or n:find("blade") or n:find("dagger") or n:find("axe") or n:find("scythe") or n:find("claw") then return "Murderer" end
+    if n:find("gun") or n:find("revolver") or n:find("pistol") or n:find("blaster") then return "Sheriff" end
+    return nil
 end
 
 local function UpdateRole(player)
-    if not player or not player.Parent then return end 
+    if not player or not player.Parent then return end
     local char = player.Character
-    if not char then return end
-    local tool = char:FindFirstChildWhichIsA("Tool")
-    if tool then Cache.Roles[player] = GetRoleFromTool(tool.Name); return end
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, t in pairs(backpack:GetChildren()) do
-            if t:IsA("Tool") then Cache.Roles[player] = GetRoleFromTool(t.Name); return end
+    
+    -- 1. Ưu tiên Tool trên tay (Chắc chắn nhất)
+    if char then
+        local charTool = char:FindFirstChildWhichIsA("Tool")
+        if charTool then
+            local role = GetRoleFromTool(charTool)
+            if role then Cache.Roles[player] = role; return end
         end
     end
+    
+    -- 2. Ưu tiên Tool trong Balo (Fix lỗi v4 không nhận balo)
+    local bp = player:FindFirstChild("Backpack")
+    if bp then
+        for _, bpTool in ipairs(bp:GetChildren()) do
+            if bpTool:IsA("Tool") then
+                local role = GetRoleFromTool(bpTool)
+                if role then Cache.Roles[player] = role; return end
+            end
+        end
+    end
+    
+    -- 3. Fallback: Đọc từ ReplicatedStorage (Khi chưa cầm vũ khí nhưng server đã cấp role)
+    local rsPlayers = ReplicatedStorage:FindFirstChild("Players")
+    if rsPlayers then
+        local pData = rsPlayers:FindFirstChild(player.Name)
+        if pData then
+            local roleObj = pData:FindFirstChild("Role")
+            if roleObj and roleObj:IsA("StringValue") then
+                local val = roleObj.Value
+                if val == "Murderer" or val == "Sheriff" or val == "Hero" then
+                    Cache.Roles[player] = val; return
+                end
+            end
+        end
+    end
+    
+    -- 4. Mặc định
     Cache.Roles[player] = "Innocent"
 end
 
+-- Vòng lặp Polling liên tục (Như bản v10)
 task.spawn(function()
     while task.wait(0.5) do
         for _, p in ipairs(Players:GetPlayers()) do
@@ -89,229 +105,290 @@ end)
 Players.PlayerRemoving:Connect(function(player)
     Cache.Roles[player] = nil
     if Cache.ESPs[player] then
-        pcall(function()
-            if Cache.ESPs[player].HL then Cache.ESPs[player].HL:Destroy() end
-            if Cache.ESPs[player].Bill then Cache.ESPs[player].Bill:Destroy() end
-        end)
+        pcall(function() if Cache.ESPs[player].HL then Cache.ESPs[player].HL:Destroy() end; if Cache.ESPs[player].Bill then Cache.ESPs[player].Bill:Destroy() end end)
         Cache.ESPs[player] = nil
     end
 end)
 
--- ===== AIMBOT =====
+-- ===== GUN DROP CACHE & ESP =====
+local function CreateGunDropESP(obj)
+    if Cache.GunDropESP then pcall(function() Cache.GunDropESP.HL:Destroy(); Cache.GunDropESP.Bill:Destroy() end) end
+    local targetPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj or nil)
+    if targetPart then
+        local hl = Instance.new("Highlight"); hl.FillTransparency = 0.4; hl.OutlineTransparency = 0; hl.FillColor = Color3.fromRGB(255,0,255); hl.OutlineColor = Color3.fromRGB(255,255,255); hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = obj
+        local bill = Instance.new("BillboardGui"); bill.Size = UDim2.new(0,100,0,40); bill.StudsOffset = Vector3.new(0,2,0); bill.AlwaysOnTop = true; bill.Parent = targetPart
+        local txt = Instance.new("TextLabel"); txt.Size = UDim2.new(1,0,1,0); txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamBold; txt.TextSize = 14; txt.TextStrokeTransparency = 0.2; txt.TextColor3 = Color3.fromRGB(255,0,255); txt.Text = "GUN DROP"; txt.Parent = bill
+        Cache.GunDropESP = { HL = hl, Bill = bill, Txt = txt, Part = targetPart }
+    end
+end
+
+local function FindAndCacheGunDrop()
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj.Name == "GunDrop" then
+            Cache.GunDropObj = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj or nil)
+            CreateGunDropESP(obj)
+            return
+        end
+    end
+    Cache.GunDropObj = nil; Cache.GunDropESP = nil
+end
+Workspace.DescendantAdded:Connect(function(obj) if obj.Name == "GunDrop" then task.wait(0.1); FindAndCacheGunDrop() end end)
+Workspace.DescendantRemoving:Connect(function(obj) if obj.Name == "GunDrop" then task.wait(0.1); Cache.GunDropObj = nil; if Cache.GunDropESP then pcall(function() Cache.GunDropESP.HL:Destroy(); Cache.GunDropESP.Bill:Destroy() end) end; Cache.GunDropESP = nil end end)
+FindAndCacheGunDrop()
+
+-- ===== AIMBOT & TARGET =====
 local function GetTarget()
     local myRole = Cache.Roles[LocalPlayer] or "Innocent"
-    if myRole == "Innocent" then return nil end 
+    if myRole == "Innocent" then return nil end
+
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local sheriffTarget, innocentTarget = nil, nil
-    local sheriffDist, innocentDist = 200, 200
+    local bestTarget, bestDist = nil, Config.Aimbot.FOV
 
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local targetRole = Cache.Roles[p] or "Innocent"
-            local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
-            if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                if myRole == "Sheriff" and targetRole == "Murderer" and dist < sheriffDist then
-                    sheriffTarget = p; sheriffDist = dist
-                elseif myRole == "Murderer" then
-                    if targetRole == "Sheriff" and dist < sheriffDist then
-                        sheriffTarget = p; sheriffDist = dist
-                    elseif targetRole == "Innocent" and dist < innocentDist then
-                        innocentTarget = p; innocentDist = dist
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
+            local hum = p.Character.Humanoid
+            if hum and hum.Health > 0 then
+                local pRole = Cache.Roles[p] or "Innocent"
+                local isEnemy = false
+                if myRole == "Murderer" then
+                    isEnemy = (pRole == "Sheriff" or pRole == "Hero" or pRole == "Innocent")
+                elseif myRole == "Sheriff" or myRole == "Hero" then
+                    isEnemy = (pRole == "Murderer")
+                end
+                
+                if isEnemy then
+                    local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                        if dist < bestDist then bestDist = dist; bestTarget = p end
                     end
                 end
             end
         end
     end
-    if myRole == "Sheriff" then return sheriffTarget end
-    if myRole == "Murderer" then return sheriffTarget or innocentTarget end
+    return bestTarget
+end
+
+local function GetTrackerTarget()
+    local myRole = Cache.Roles[LocalPlayer] or "Innocent"
+    local targetRole = (myRole == "Murderer") and "Sheriff" or "Murderer"
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 and (Cache.Roles[p] == targetRole) then return p end
+        end
+    end
     return nil
 end
 
--- ===== GIAO DIỆN MINI UI =====
-local CoreGui = game:GetService("CoreGui")
-if CoreGui:FindFirstChild("MM2MiniUI") then CoreGui.MM2MiniUI:Destroy() end
+-- ===== UI SETUP =====
+local Theme = { BG = Color3.fromRGB(12,12,25), Stroke = Color3.fromRGB(0,150,255), Top = Color3.fromRGB(0,100,220), Off_BG = Color3.fromRGB(20,20,40), Off_St = Color3.fromRGB(35,35,65), Off_Tx = Color3.fromRGB(100,100,140), On_BG = Color3.fromRGB(0,120,255), On_St = Color3.fromRGB(80,180,255), On_Tx = Color3.fromRGB(255,255,255), RST_BG = Color3.fromRGB(150,0,0) }
+local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "MM2VIP_GUI"; ScreenGui.ResetOnSpawn = false; ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; pcall(function() ScreenGui.Parent = CoreGui end)
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MM2MiniUI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-pcall(function() ScreenGui.Parent = CoreGui end)
-if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+local FloatBtn = Instance.new("TextButton"); FloatBtn.Size = UDim2.new(0, 35, 0, 35); FloatBtn.Position = UDim2.new(0, 12, 0.4, 0); FloatBtn.BackgroundColor3 = Theme.BG; FloatBtn.Text = ""; FloatBtn.AutoButtonColor = false; FloatBtn.Parent = ScreenGui; Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
+local FloatStroke = Instance.new("UIStroke", FloatBtn); FloatStroke.Color = Theme.Stroke; FloatStroke.Thickness = 1.5
+local FloatDot = Instance.new("Frame"); FloatDot.Size = UDim2.new(0, 10, 0, 10); FloatDot.Position = UDim2.new(0.5, -5, 0.5, -5); FloatDot.BackgroundColor3 = Theme.Stroke; FloatDot.BorderSizePixel = 0; FloatDot.Parent = FloatBtn; Instance.new("UICorner", FloatDot).CornerRadius = UDim.new(1, 0)
 
-local FloatBtn = Instance.new("TextButton")
-FloatBtn.Size = UDim2.new(0, 35, 0, 35)
-FloatBtn.Position = UDim2.new(0, 12, 0.4, 0)
-FloatBtn.BackgroundColor3 = Theme.Float_BG
-FloatBtn.Text = ""
-FloatBtn.AutoButtonColor = false
-FloatBtn.Parent = ScreenGui
-Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
-local FloatStroke = Instance.new("UIStroke", FloatBtn)
-FloatStroke.Color = Theme.Float_Stroke; FloatStroke.Thickness = 1.5
-local FloatDot = Instance.new("Frame")
-FloatDot.Size = UDim2.new(0, 10, 0, 10); FloatDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-FloatDot.BackgroundColor3 = Theme.Float_Stroke; FloatDot.BorderSizePixel = 0; FloatDot.Parent = FloatBtn
-Instance.new("UICorner", FloatDot).CornerRadius = UDim.new(1, 0)
+local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 250, 0, 350); MainFrame.Position = UDim2.new(0.5, -125, 0.1, 0); MainFrame.BackgroundColor3 = Theme.BG; MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+local MainStroke = Instance.new("UIStroke", MainFrame); MainStroke.Color = Theme.Stroke; MainStroke.Thickness = 1.2
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 235, 0, 105)
-MainFrame.Position = UDim2.new(0.5, -117, 0.1, 0)
-MainFrame.BackgroundColor3 = Theme.BG_Frame
-MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
-local MainStroke = Instance.new("UIStroke", MainFrame)
-MainStroke.Color = Theme.Stroke_Main; MainStroke.Thickness = 1.2
+local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1,0,0,25); TopBar.BackgroundColor3 = Theme.Top; TopBar.BorderSizePixel = 0; TopBar.Parent = MainFrame; Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0,10)
+local TBF = Instance.new("Frame"); TBF.Size = UDim2.new(1,0,0,10); TBF.Position = UDim2.new(0,0,1,-10); TBF.BackgroundColor3 = Theme.Top; TBF.BorderSizePixel = 0; TBF.Parent = TopBar
+local Title = Instance.new("TextLabel", TopBar); Title.Size = UDim2.new(1, 0, 1, 0); Title.BackgroundTransparency = 1; Title.Text = "  MM2 VIP v5.0"; Title.TextColor3 = Color3.fromRGB(220, 235, 255); Title.Font = Enum.Font.GothamBold; Title.TextSize = 12; Title.TextXAlignment = Enum.TextXAlignment.Left
 
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 25); TopBar.BackgroundColor3 = Theme.TopBar; TopBar.BorderSizePixel = 0; TopBar.Parent = MainFrame
-Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 10)
-local TopBarFix = Instance.new("Frame")
-TopBarFix.Size = UDim2.new(1, 0, 0, 10); TopBarFix.Position = UDim2.new(0, 0, 1, -10); TopBarFix.BackgroundColor3 = Theme.TopBar; TopBarFix.BorderSizePixel = 0; TopBarFix.Parent = TopBar
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 1, 0); Title.BackgroundTransparency = 1; Title.Text = "  MM2 VIP"
-Title.TextColor3 = Color3.fromRGB(220, 235, 255); Title.Font = Enum.Font.GothamBold; Title.TextSize = 12; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = TopBar
-
-local function CreateBtn(text, initialState, pos, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 65, 0, 60)
-    btn.Position = pos
-    btn.BackgroundColor3 = initialState and Theme.Btn_On_BG or Theme.Btn_Off_BG
-    btn.Text = text
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 14
-    btn.TextColor3 = initialState and Theme.Btn_On_Text or Theme.Btn_Off_Text
-    btn.AutoButtonColor = false
-    btn.Parent = MainFrame
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-    local btnStroke = Instance.new("UIStroke", btn)
-    btnStroke.Color = initialState and Theme.Btn_On_Stroke or Theme.Btn_Off_Stroke; btnStroke.Thickness = 1.2
-
-    btn.MouseButton1Click:Connect(function()
-        local newState = callback()
-        btn.BackgroundColor3 = newState and Theme.Btn_On_BG or Theme.Btn_Off_BG
-        btn.TextColor3 = newState and Theme.Btn_On_Text or Theme.Btn_Off_Text
-        btnStroke.Color = newState and Theme.Btn_On_Stroke or Theme.Btn_Off_Stroke
-    end)
-end
-
-CreateBtn("ESP", Config.ESP.Enabled, UDim2.new(0, 10, 0, 35), function()
-    Config.ESP.Enabled = not Config.ESP.Enabled; return Config.ESP.Enabled
-end)
-CreateBtn("AIM", Config.Aimbot.Enabled, UDim2.new(0, 85, 0, 35), function()
-    Config.Aimbot.Enabled = not Config.Aimbot.Enabled; return Config.Aimbot.Enabled
-end)
-CreateBtn("RCH", Config.Reach.Enabled, UDim2.new(0, 160, 0, 35), function()
-    Config.Reach.Enabled = not Config.Reach.Enabled; return Config.Reach.Enabled
-end)
-
-local function MakeDraggable(gui)
-    local dragging, dragInput, dragStart, startPos
-    gui.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; dragStart = input.Position; startPos = gui.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
-        end
-    end)
-    gui.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-end
+local function MakeDraggable(gui) local dragging, dragInput, dragStart, startPos; gui.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging=true; dragStart=input.Position; startPos=gui.Position; input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging=false end end) end end); gui.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput=input end end); UserInputService.InputChanged:Connect(function(input) if input==dragInput and dragging then local d=input.Position-dragStart; gui.Position=UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y) end end) end
 MakeDraggable(FloatBtn); MakeDraggable(MainFrame)
-FloatBtn.MouseButton1Click:Connect(function()
-    State.UIVisible = not State.UIVisible; MainFrame.Visible = State.UIVisible
+FloatBtn.MouseButton1Click:Connect(function() State.UIVisible = not State.UIVisible; MainFrame.Visible = State.UIVisible end)
+
+local GrabButton, ShootButton
+
+local function CreateBtn(text, state, pos, cb, isRed)
+    local b = Instance.new("TextButton"); b.Size = UDim2.new(0,65,0,60); b.Position = pos; b.BackgroundColor3 = isRed and Theme.RST_BG or (state and Theme.On_BG or Theme.Off_BG); b.Text=text; b.Font=Enum.Font.GothamBold; b.TextSize=14; b.TextColor3 = isRed and Color3.fromRGB(255,255,255) or (state and Theme.On_Tx or Theme.Off_Tx); b.AutoButtonColor=false; b.Parent=MainFrame; Instance.new("UICorner",b).CornerRadius=UDim.new(0,8); local s = Instance.new("UIStroke",b); s.Color = isRed and Color3.fromRGB(255,0,0) or (state and Theme.On_St or Theme.Off_St); s.Thickness=1.2
+    b.MouseButton1Click:Connect(function() local ns = cb(); if not isRed then b.BackgroundColor3=ns and Theme.On_BG or Theme.Off_BG; b.TextColor3=ns and Theme.On_Tx or Theme.Off_Tx; s.Color=ns and Theme.On_St or Theme.Off_St end end)
+end
+
+CreateBtn("ESP", true, UDim2.new(0,10,0,35), function() Config.ESP.Enabled = not Config.ESP.Enabled; return Config.ESP.Enabled end)
+CreateBtn("AIM", false, UDim2.new(0,85,0,35), function() Config.Aimbot.Enabled = not Config.Aimbot.Enabled; return Config.Aimbot.Enabled end)
+CreateBtn("RCH", false, UDim2.new(0,160,0,35), function() Config.Reach.Enabled = not Config.Reach.Enabled; return Config.Reach.Enabled end)
+CreateBtn("SIL", false, UDim2.new(0,10,0,105), function() Config.SilentAim.Enabled = not Config.SilentAim.Enabled; if ShootButton then ShootButton.Visible = Config.SilentAim.Enabled end; return Config.SilentAim.Enabled end)
+CreateBtn("GRAB", false, UDim2.new(0,85,0,105), function() Config.GunCollect.Enabled = not Config.GunCollect.Enabled; if GrabButton then GrabButton.Visible = Config.GunCollect.Enabled end; return Config.GunCollect.Enabled end)
+CreateBtn("TRK", false, UDim2.new(0,160,0,105), function() Config.Tracker.Enabled = not Config.Tracker.Enabled; return Config.Tracker.Enabled end)
+CreateBtn("RST", false, UDim2.new(0,10,0,175), function() State.ShuttingDown=true; pcall(function() ScreenGui:Destroy() end); if TrackerLine then pcall(TrackerLine.Remove, TrackerLine) end; pcall(ReachCircle.Destroy, ReachCircle); return true end, true)
+
+local function CreateSlider(lbl, tbl, key, min, max, px, py)
+    local l = Instance.new("TextLabel"); l.Size=UDim2.new(0,220,0,16); l.Position=UDim2.new(0,px,0,py); l.BackgroundTransparency=1; l.Text=lbl..": "..string.format("%.2f",tbl[key]); l.Font=Enum.Font.Gotham; l.TextSize=10; l.TextColor3=Color3.fromRGB(200,200,200); l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=MainFrame
+    local b = Instance.new("TextButton"); b.Size=UDim2.new(0,220,0,6); b.Position=UDim2.new(0,px,0,py+16); b.BackgroundColor3=Color3.fromRGB(50,50,60); b.Text=""; b.BorderSizePixel=0; b.AutoButtonColor=false; b.Parent=MainFrame; Instance.new("UICorner",b).CornerRadius=UDim.new(1,0)
+    local f = Instance.new("Frame"); f.BackgroundColor3=Color3.fromRGB(0,150,255); f.BorderSizePixel=0; f.Parent=b; Instance.new("UICorner",f).CornerRadius=UDim.new(1,0)
+    local function up() local p=(tbl[key]-min)/(max-min); f.Size=UDim2.new(math.clamp(p,0,1),0,1,0); l.Text=lbl..": "..string.format("%.2f",tbl[key]) end
+    local dg=false; b.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dg=true; local p=math.clamp((i.Position.X-b.AbsolutePosition.X)/b.AbsoluteSize.X,0,1); tbl[key]=min+(p*(max-min)); up() end end)
+    UserInputService.InputChanged:Connect(function(i) if dg and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then local p=math.clamp((i.Position.X-b.AbsolutePosition.X)/b.AbsoluteSize.X,0,1); tbl[key]=min+(p*(max-min)); up() end end)
+    UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dg=false end end)
+    task.defer(up)
+end
+CreateSlider("Smoothing", Config.Aimbot, "Smoothing", 0.01, 1, 15, 245)
+CreateSlider("Prediction", Config.Aimbot, "Prediction", 0.0, 0.5, 15, 273)
+CreateSlider("Speed", Config.GunCollect, "Speed", 100, 1000, 15, 301)
+
+-- Shoot & Grab Buttons
+local ShootBtnGui = Instance.new("ScreenGui"); ShootBtnGui.Name = "MM2_ShootBtn"; ShootBtnGui.ResetOnSpawn = false; pcall(function() ShootBtnGui.Parent = CoreGui end)
+ShootButton = Instance.new("TextButton"); ShootButton.Size=UDim2.new(0,100,0,40); ShootButton.Position=UDim2.new(0.5,-50,0.5,-20); ShootButton.BackgroundColor3=Color3.fromRGB(200,50,50); ShootButton.BackgroundTransparency=0.4; ShootButton.Text="SHOOT"; ShootButton.Font=Enum.Font.GothamBold; ShootButton.TextSize=18; ShootButton.TextColor3=Color3.new(1,1,1); ShootButton.BorderSizePixel=0; ShootButton.Visible=false; ShootButton.Parent=ShootBtnGui; Instance.new("UICorner",ShootButton).CornerRadius=UDim.new(0,8)
+MakeDraggable(ShootButton)
+
+local ShootRemoteCache = nil
+local function findShootRemote()
+    if ShootRemoteCache and ShootRemoteCache.Parent then return ShootRemoteCache end
+    local function scan(p) for _, o in ipairs(p:GetChildren()) do if o:IsA("RemoteEvent") then return o end; local f=scan(o); if f then return f end end end
+    ShootRemoteCache = scan(ReplicatedStorage)
+    return ShootRemoteCache
+end
+
+ShootButton.MouseButton1Click:Connect(function()
+    if not Config.SilentAim.Enabled then return end
+    local myChar = LocalPlayer.Character; if not myChar then return end
+    local tool = myChar:FindFirstChildWhichIsA("Tool"); if not tool or not tool:FindFirstChild("GunScript") then return end
+    local mTarget = GetTarget()
+    if mTarget and mTarget.Character and mTarget.Character:FindFirstChild("HumanoidRootPart") then
+        local root = mTarget.Character.HumanoidRootPart
+        local aimPos = root.Position + root.Velocity * Config.Aimbot.Prediction
+        local remote = findShootRemote()
+        if remote then pcall(function() remote:FireServer(aimPos) end) end
+    end
 end)
 
--- ===== PLAYER ESP =====
+local GrabBtnGui = Instance.new("ScreenGui"); GrabBtnGui.Name = "MM2_GrabBtnGui"; GrabBtnGui.ResetOnSpawn = false; GrabBtnGui.Parent = CoreGui
+GrabButton = Instance.new("TextButton"); GrabButton.Size=UDim2.new(0,120,0,40); GrabButton.Position=UDim2.new(0.5,-60,0.8,0); GrabButton.BackgroundColor3=Color3.fromRGB(255,50,50); GrabButton.BackgroundTransparency=0.5; GrabButton.TextColor3=Color3.fromRGB(255,255,255); GrabButton.Text="GRAB GUN"; GrabButton.Font=Enum.Font.GothamBold; GrabButton.TextSize=16; GrabButton.Visible=false; GrabButton.BorderSizePixel=0; GrabButton.Parent=GrabBtnGui; Instance.new("UICorner",GrabButton).CornerRadius=UDim.new(0,8)
+MakeDraggable(GrabButton)
+
+GrabButton.MouseButton1Click:Connect(function()
+    if not Cache.GunDropObj or not Cache.GunDropObj.Parent then return end
+    local myChar = LocalPlayer.Character; local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
+    GrabButton.Text = "FLYING..."; GrabButton.AutoButtonColor = false
+    local originalCFrame = myHRP.CFrame; local gunPos = Cache.GunDropObj.Position; local distance = (myHRP.Position - gunPos).Magnitude; local tweenTime = distance / Config.GunCollect.Speed
+    local antiGravityCon; antiGravityCon = RunService.Stepped:Connect(function() if myHRP and myHRP.Parent then myHRP.Velocity = Vector3.zero; myHRP.AssemblyLinearVelocity = Vector3.zero else antiGravityCon:Disconnect() end end)
+    local t1 = TweenService:Create(myHRP, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(gunPos)}); t1:Play(); t1.Completed:Wait()
+    myHRP.CFrame = CFrame.new(gunPos); myHRP.Velocity = Vector3.zero; task.wait(0.4)
+    local t2 = TweenService:Create(myHRP, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {CFrame = originalCFrame}); t2:Play(); t2.Completed:Wait()
+    if antiGravityCon then antiGravityCon:Disconnect() end; GrabButton.Text = "GRAB GUN"; GrabButton.AutoButtonColor = true
+end)
+
+-- ===== PLAYER ESP (GIỮ NGUYÊN TỪ v10) =====
 local function CreateESP(player)
     if player == LocalPlayer or Cache.ESPs[player] or not player.Parent then return end
-    local char = player.Character
-    if not char then return end
-    local hrp = char:WaitForChild("HumanoidRootPart", 3)
-    if not hrp then return end
-    local hl = Instance.new("Highlight")
-    hl.FillTransparency = 0.6; hl.OutlineTransparency = 0.1; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = char
-    local bill = Instance.new("BillboardGui")
-    bill.Size = UDim2.new(0, 150, 0, 40); bill.StudsOffset = Vector3.new(0, 3, 0); bill.AlwaysOnTop = true; bill.Parent = char:WaitForChild("Head", 3)
-    local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamBold; txt.TextScaled = true; txt.TextStrokeTransparency = 0.2; txt.Parent = bill
+    local char = player.Character; if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local hl = Instance.new("Highlight"); hl.FillTransparency = 0.6; hl.OutlineTransparency = 0.1; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = char
+    local bill = Instance.new("BillboardGui"); bill.Size = UDim2.new(0, 150, 0, 40); bill.StudsOffset = Vector3.new(0, 3, 0); bill.AlwaysOnTop = true; bill.Parent = hrp
+    local txt = Instance.new("TextLabel"); txt.Size = UDim2.new(1,0,1,0); txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamBold; txt.TextSize = 13; txt.TextWrapped = true; txt.TextStrokeTransparency = 0.2; txt.Parent = bill
     Cache.ESPs[player] = { Char = char, HRP = hrp, HL = hl, Bill = bill, Txt = txt }
 end
 
--- ===== VÒNG LẶP CHÍNH =====
-RunService.RenderStepped:Connect(function()
-    local camPos = Camera.CFrame.Position
-    local myChar = LocalPlayer.Character
-    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    
-    -- Aimbot Logic
-    if Config.Aimbot.Enabled then
-        State.AimbotTarget = GetTarget()
-        if State.AimbotTarget and State.AimbotTarget.Character then
-            local targetHrp = State.AimbotTarget.Character:FindFirstChild("HumanoidRootPart")
-            if targetHrp then
-                local tPos = targetHrp.Position + (targetHrp.Velocity * Config.Aimbot.Prediction)
-                Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(camPos, tPos), Config.Aimbot.Smoothing)
-            end
-        end
-    end
-
-    -- Reach & Circle Logic (Sửa lỗi dùng Transparency thay vì Visible)
-    if Config.Reach.Enabled and myHRP then
-        -- Hiện vòng tròn bằng Transparency
-        ReachCircle.Transparency = 0.75 
-        ReachCircle.CFrame = myHRP.CFrame * CFrame.new(0, -2.5, 0)
-
-        local tool = myChar:FindFirstChildWhichIsA("Tool")
-        if tool then
-            local handle = tool:FindFirstChild("Handle")
-            if handle and handle:IsA("BasePart") and handle.Size.X < Config.Reach.Radius then
-                handle.Size = Vector3.new(Config.Reach.Radius, Config.Reach.Radius, Config.Reach.Radius)
-                handle.Transparency = 1
-                handle.CanCollide = false
-                handle.Massless = true
-            end
-        end
-    else
-        -- Ẩn vòng tròn bằng Transparency = 1
-        ReachCircle.Transparency = 1 
-    end
-
-    -- ESP Logic
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer or not p.Parent then continue end
-        local esp = Cache.ESPs[p]
-        
-        if esp and esp.Char and esp.Char.Parent then
-            local dist = (camPos - esp.HRP.Position).Magnitude
-            local role = Cache.Roles[p] or "Innocent"
-            if Config.ESP.Enabled and dist < Config.ESP.MaxDistance then
-                local color = role == "Murderer" and Color3.fromRGB(255, 50, 50) or role == "Sheriff" and Color3.fromRGB(50, 100, 255) or Color3.fromRGB(0, 255, 0)
-                esp.HL.Enabled = true; esp.HL.FillColor = color; esp.HL.OutlineColor = color
-                esp.Bill.Enabled = true; esp.Txt.Text = p.DisplayName .. "\n[" .. role .. "] " .. math.floor(dist) .. "m"; esp.Txt.TextColor3 = color
-            else
-                esp.HL.Enabled = false; esp.Bill.Enabled = false
-            end
-        elseif esp then
-            pcall(function()
-                if esp.HL then esp.HL:Destroy() end
-                if esp.Bill then esp.Bill:Destroy() end
-            end)
-            Cache.ESPs[p] = nil
-        end
-    end
-end)
-
 for _, p in ipairs(Players:GetPlayers()) do 
-    if p.Character then CreateESP(p) end
-    p.CharacterAdded:Connect(function() task.wait(0.5); CreateESP(p) end)
+    if p ~= LocalPlayer then
+        if p.Character then CreateESP(p) end
+        p.CharacterAdded:Connect(function() task.wait(0.5); CreateESP(p) end)
+    end
 end
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function() task.wait(0.5); CreateESP(p) end)
+end)
+
+-- ===== REACH LOGIC =====
+local function HandleReach()
+    local myChar = LocalPlayer.Character; 
+    if not myChar then ReachCircle.Transparency = 1; return end
+    
+    local tool = myChar:FindFirstChildWhichIsA("Tool")
+    local isHoldingKnife = tool and (tool:FindFirstChild("KnifeScript") or string.find(string.lower(tool.Name), "knife"))
+    
+    if isHoldingKnife and Config.Reach.Enabled then
+        local handle = tool:FindFirstChild("Handle")
+        if handle and handle:IsA("BasePart") then
+            if Cache.OriginalHandleTool ~= tool then 
+                Cache.OriginalHandleSize = handle.Size 
+                Cache.OriginalHandleTool = tool
+            end
+            local m = Config.Reach.Radius / 3
+            handle.Size = Cache.OriginalHandleSize * Vector3.new(m, m, m)
+            handle.Transparency = 0.8
+            handle.CanCollide = false
+            handle.Massless = true
+            
+            local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+            if myHRP then
+                ReachCircle.Transparency = 0.75
+                ReachCircle.Size = Vector3.new(0.15, Config.Reach.Radius * 2, Config.Reach.Radius * 2)
+                ReachCircle.CFrame = myHRP.CFrame * CFrame.new(0, -2.5, 0)
+            end
+        end
+    else
+        if Cache.OriginalHandleTool and Cache.OriginalHandleSize then
+            local oldHandle = Cache.OriginalHandleTool:FindFirstChild("Handle")
+            if oldHandle and oldHandle:IsA("BasePart") then
+                oldHandle.Size = Cache.OriginalHandleSize
+                oldHandle.Transparency = 0
+                oldHandle.CanCollide = true
+                oldHandle.Massless = false
+            end
+        end
+        Cache.OriginalHandleSize = nil
+        Cache.OriginalHandleTool = nil
+        ReachCircle.Transparency = 1
+    end
+end
+
+-- ===== MAIN LOOP =====
+RunService.RenderStepped:Connect(function()
+    if State.ShuttingDown then return end
+    local camPos = Camera.CFrame.Position
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+    -- AIMBOT
+    if Config.Aimbot.Enabled then
+        local target = GetTarget()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local tHrp = target.Character.HumanoidRootPart
+            local tPos = tHrp.Position + (tHrp.Velocity * Config.Aimbot.Prediction)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(camPos, tPos), Config.Aimbot.Smoothing)
+        end
+    end
+
+    -- TRACKER
+    if TrackerSupported and Config.Tracker.Enabled then
+        local tTarget = GetTrackerTarget()
+        if tTarget and tTarget.Character and tTarget.Character:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = Camera:WorldToViewportPoint(tTarget.Character.HumanoidRootPart.Position)
+            if onScreen then TrackerLine.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y); TrackerLine.To = Vector2.new(pos.X, pos.Y); TrackerLine.Visible = true else TrackerLine.Visible = false end
+        else TrackerLine.Visible = false end
+    elseif TrackerSupported then TrackerLine.Visible = false end
+
+    -- REACH
+    HandleReach()
+
+    -- ESP LOGIC (Giống v10)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Parent then
+            local esp = Cache.ESPs[p]
+            
+            if esp and esp.Char and esp.Char.Parent then
+                local dist = (camPos - esp.HRP.Position).Magnitude
+                local role = Cache.Roles[p] or "Innocent"
+                if Config.ESP.Enabled and dist < Config.ESP.MaxDistance then
+                    local color = role=="Murderer" and Color3.fromRGB(255,50,50) or role=="Sheriff" and Color3.fromRGB(50,100,255) or role=="Hero" and Color3.fromRGB(255,215,0) or Color3.fromRGB(0,255,0)
+                    esp.HL.Enabled = true; esp.HL.FillColor = color; esp.HL.OutlineColor = color
+                    esp.Bill.Enabled = true; esp.Txt.Text = p.DisplayName.."\n["..role.."] "..math.floor(dist).."m"; esp.Txt.TextColor3 = color
+                else
+                    esp.HL.Enabled = false; esp.Bill.Enabled = false
+                end
+            elseif esp then
+                pcall(function() if esp.HL then esp.HL:Destroy() end; if esp.Bill then esp.Bill:Destroy() end end)
+                Cache.ESPs[p] = nil
+            end
+        end
+    end
+
+    -- GUN DROP ESP UPDATE
+    if Config.ESP.Enabled and Cache.GunDropObj and Cache.GunDropObj.Parent and Cache.GunDropESP and Cache.GunDropESP.Txt and myHRP then
+        local dist = math.floor((myHRP.Position - Cache.GunDropObj.Position).Magnitude)
+        Cache.GunDropESP.Txt.Text = "GUN DROP\n" .. dist .. "m"
+    end
 end)
