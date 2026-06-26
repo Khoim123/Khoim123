@@ -27,8 +27,8 @@ local Tabs = {
 Window:SelectTab(1)
 
 local DialogButton = Tabs.Main:AddButton({
-    Title = "Mở Dialog",
-    Description = "Click để hiện dialog xác nhận",
+    Title = "Aimbot script",
+    Description = "",
     Callback = function()
         Window:Dialog({
             Title = "Title",
@@ -37,7 +37,7 @@ local DialogButton = Tabs.Main:AddButton({
                 { 
                     Title = "Confirm",
                     Callback = function()
-                        print("Confirmed the dialog.")
+                        loadstring(game:HttpGet("https://raw.githubusercontent.com/Khoim123/Khoim123/main/Aimbot"))()
                     end 
                 },
                 {
