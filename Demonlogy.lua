@@ -1,11 +1,18 @@
 -- ============================================================
--- Ghost Info ESP - v3.32 Mobile Ultra (FIXED + Aimbot)
+-- Ghost Info ESP - v4.00 Mobile Ultra (FIXED + Aimbot + SpeedHack)
+-- Changelog v4.00:
+--   + Speed Hack (toggle + textbox nhập tốc độ, re-apply khi respawn)
+--   + GUI redesign rộng hơn (460x560), pill tab + sliding indicator
+--   + TweenService cho hover & tab switch mượt hơn
+--   + Section labels + UI gradients cho depth
+--   + Hover effects trên tất cả button
 -- ============================================================
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
 -- Chờ Character load trước
@@ -44,6 +51,57 @@ local function stroke(parent, col, th)
 end
 local function getStroke(obj)
     return obj:FindFirstChildOfClass("UIStroke")
+end
+-- Gradient helper (vertical by default)
+local function gradient(parent, colorTop, colorBottom, rot)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new(colorTop, colorBottom)
+    g.Rotation = rot or 90
+    g.Parent = parent
+    return g
+end
+-- Padding helper
+local function padding(parent, top, bottom, left, right)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop = UDim.new(0, top or 0)
+    p.PaddingBottom = UDim.new(0, bottom or 0)
+    p.PaddingLeft = UDim.new(0, left or 0)
+    p.PaddingRight = UDim.new(0, right or 0)
+    p.Parent = parent
+    return p
+end
+-- Smooth hover tween helper (color tween)
+local function addHover(btn, normalColor, hoverColor, enterColor)
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = hoverColor
+        }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = enterColor or normalColor
+        }):Play()
+    end)
+end
+-- Smooth size tween on press (mobile-friendly feedback)
+local function addPressScale(btn, normalSize, pressedSize)
+    btn.MouseButton1Down:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = pressedSize
+        }):Play()
+    end)
+    btn.MouseButton1Up:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = normalSize
+        }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        if btn.Active then
+            TweenService:Create(btn, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = normalSize
+            }):Play()
+        end
+    end)
 end
 
 -- ===================== FULL BRIGHT =====================
@@ -414,154 +472,220 @@ table.insert(connections, workspace.DescendantRemoving:Connect(function(obj)
     if isGhostObj(obj) or ghostList[obj] then onGhostRemoved(obj) end
 end))
 
--- ===================== GUI =====================
+-- ===================== SPEED HACK (forward declarations + core) =====================
+-- These must be declared before the GUI section because the TextBox FocusLost
+-- handler closes over them as upvalues.
+local speedHackActive   = false
+local speedHackValue    = 50
+local defaultWalkSpeed  = 16
+
+local function applySpeedHack()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if speedHackActive then
+        hum.WalkSpeed = speedHackValue
+    else
+        -- Restore to a sensible default (Roblox default WalkSpeed is 16)
+        hum.WalkSpeed = defaultWalkSpeed
+    end
+end
+
+-- Re-apply speed hack whenever the character respawns (WalkSpeed resets each spawn)
+LocalPlayer.CharacterAdded:Connect(function()
+    -- Wait a frame so Humanoid is fully ready
+    task.wait(0.2)
+    applySpeedHack()
+end)
+
+-- ===================== GUI (v4.0 redesigned) =====================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "GhostInfoGui"; screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = getSafeGui()
 
--- Mini frame
+-- Color palette (modern dark + red accent)
+local C_BG_TOP    = Color3.fromRGB(20, 20, 26)
+local C_BG_BOT    = Color3.fromRGB(10, 10, 14)
+local C_HEADER    = Color3.fromRGB(28, 28, 36)
+local C_PANEL     = Color3.fromRGB(22, 22, 28)
+local C_PANEL_HI  = Color3.fromRGB(32, 32, 40)
+local C_STROKE    = Color3.fromRGB(255, 60, 60)
+local C_STROKE_DIM= Color3.fromRGB(70, 70, 80)
+local C_TEXT      = Color3.fromRGB(245, 245, 248)
+local C_TEXT_DIM  = Color3.fromRGB(160, 160, 170)
+local C_GOLD      = Color3.fromRGB(255, 215, 0)
+local C_ON_GREEN  = Color3.fromRGB(0, 180, 90)
+local C_OFF_RED   = Color3.fromRGB(160, 30, 30)
+
+-- Mini frame (slightly larger, with gradient)
 local miniFrame = Instance.new("Frame")
-miniFrame.Size = UDim2.new(0,56,0,56)
+miniFrame.Size = UDim2.new(0,62,0,62)
 miniFrame.Position = UDim2.new(0,10,0.3,0)
-miniFrame.BackgroundColor3 = Color3.fromRGB(15,15,17)
-miniFrame.BackgroundTransparency = 0.05
+miniFrame.BackgroundColor3 = C_BG_TOP
+miniFrame.BackgroundTransparency = 0.02
 miniFrame.BorderSizePixel = 0; miniFrame.Active = true
--- FIX: Mặc định Always Show Mini là ON nên Visible = true
 miniFrame.Visible = true; miniFrame.Parent = screenGui
-corner(miniFrame,12); stroke(miniFrame,Color3.fromRGB(255,60,60),1.5)
+corner(miniFrame,14); stroke(miniFrame,C_STROKE,1.5)
+gradient(miniFrame, C_BG_TOP, C_BG_BOT, 90)
 
 local ava = Instance.new("ImageLabel")
-ava.Size = UDim2.new(1,-6,1,-6); ava.Position = UDim2.new(0,3,0,3)
+ava.Size = UDim2.new(1,-8,1,-8); ava.Position = UDim2.new(0,4,0,4)
 ava.BackgroundTransparency = 1
--- FIX: Đổi thành ID ảnh Roblox yêu cầu
 ava.Image = "rbxassetid://108674032232259"
-ava.Parent = miniFrame; corner(ava,10)
+ava.Parent = miniFrame; corner(ava,11)
 
 local expandBtn = Instance.new("TextButton")
 expandBtn.Size = UDim2.new(1,0,1,0); expandBtn.BackgroundTransparency = 1
 expandBtn.Text = ""; expandBtn.AutoButtonColor = false
 expandBtn.Parent = miniFrame
 
--- Main frame
+-- Main frame (wider 460, taller 560, gradient bg)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0,380,0,500)
+mainFrame.Size = UDim2.new(0,460,0,560)
 mainFrame.Position = UDim2.new(0,10,0.3,0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(12,12,14)
+mainFrame.BackgroundColor3 = C_BG_TOP
 mainFrame.BackgroundTransparency = 0.02
 mainFrame.BorderSizePixel = 0; mainFrame.Active = true
 mainFrame.Parent = screenGui
-corner(mainFrame,12); stroke(mainFrame,Color3.fromRGB(255,60,60),1.5)
+corner(mainFrame,14); stroke(mainFrame,C_STROKE,1.5)
+gradient(mainFrame, C_BG_TOP, C_BG_BOT, 90)
 
--- Header
+-- Header (taller, with gradient + bottom border accent)
 local header = Instance.new("Frame")
-header.Size = UDim2.new(1,0,0,40)
-header.BackgroundColor3 = Color3.fromRGB(22,22,26)
+header.Size = UDim2.new(1,0,0,48)
+header.BackgroundColor3 = C_HEADER
 header.BorderSizePixel = 0; header.Active = true
-header.Parent = mainFrame; corner(header,12)
+header.Parent = mainFrame; corner(header,14)
+gradient(header, Color3.fromRGB(36, 36, 44), Color3.fromRGB(22, 22, 28), 90)
 local hf = Instance.new("Frame")
-hf.Size = UDim2.new(1,0,0,12); hf.Position = UDim2.new(0,0,1,-12)
-hf.BackgroundColor3 = Color3.fromRGB(22,22,26); hf.BorderSizePixel = 0
+hf.Size = UDim2.new(1,-24,0,1); hf.Position = UDim2.new(0,12,1,-1)
+hf.BackgroundColor3 = C_STROKE; hf.BorderSizePixel = 0
+hf.BackgroundTransparency = 0.4
 hf.Parent = header
 
 local tit = Instance.new("TextLabel")
-tit.Size = UDim2.new(1,-120,0,40); tit.Position = UDim2.new(0,12,0,0)
-tit.BackgroundTransparency = 1; tit.Text = "GHOST INFO"
-tit.TextColor3 = Color3.new(1,1,1); tit.Font = Enum.Font.GothamBold
-tit.TextSize = 15; tit.TextXAlignment = Enum.TextXAlignment.Left
+tit.Size = UDim2.new(0,200,0,28); tit.Position = UDim2.new(0,16,0,4)
+tit.BackgroundTransparency = 1; tit.Text = "👻 GHOST INFO"
+tit.TextColor3 = C_TEXT; tit.Font = Enum.Font.GothamBlack
+tit.TextSize = 17; tit.TextXAlignment = Enum.TextXAlignment.Left
 tit.Parent = header
 
+local subtit = Instance.new("TextLabel")
+subtit.Size = UDim2.new(0,200,0,14); subtit.Position = UDim2.new(0,16,0,32)
+subtit.BackgroundTransparency = 1; subtit.Text = "v4.0 • ESP + Aimbot + SpeedHack"
+subtit.TextColor3 = C_TEXT_DIM; subtit.Font = Enum.Font.Gotham
+subtit.TextSize = 9; subtit.TextXAlignment = Enum.TextXAlignment.Left
+subtit.Parent = header
+
 local minBtn = Instance.new("TextButton")
-minBtn.Size = UDim2.new(0,32,0,28); minBtn.Position = UDim2.new(1,-72,0,6)
-minBtn.BackgroundColor3 = Color3.fromRGB(35,35,40); minBtn.Text = "−"
-minBtn.TextColor3 = Color3.new(1,1,1); minBtn.Font = Enum.Font.GothamBold
+minBtn.Size = UDim2.new(0,36,0,32); minBtn.Position = UDim2.new(1,-88,0,8)
+minBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48); minBtn.Text = "—"
+minBtn.TextColor3 = C_TEXT; minBtn.Font = Enum.Font.GothamBold
 minBtn.TextSize = 16; minBtn.BorderSizePixel = 0; minBtn.Parent = header
-corner(minBtn,6); stroke(minBtn,Color3.fromRGB(80,80,80),1)
+corner(minBtn,7); stroke(minBtn,Color3.fromRGB(80,80,90),1)
+addHover(minBtn, Color3.fromRGB(40,40,48), Color3.fromRGB(60,60,72))
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0,32,0,28); closeBtn.Position = UDim2.new(1,-36,0,6)
-closeBtn.BackgroundColor3 = Color3.fromRGB(35,35,40); closeBtn.Text = "×"
-closeBtn.TextColor3 = Color3.fromRGB(255,80,80); closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 14; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
-corner(closeBtn,6); stroke(closeBtn,Color3.fromRGB(80,80,80),1)
+closeBtn.Size = UDim2.new(0,36,0,32); closeBtn.Position = UDim2.new(1,-44,0,8)
+closeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48); closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255,100,100); closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 13; closeBtn.BorderSizePixel = 0; closeBtn.Parent = header
+corner(closeBtn,7); stroke(closeBtn,Color3.fromRGB(80,80,90),1)
+addHover(closeBtn, Color3.fromRGB(40,40,48), Color3.fromRGB(120,30,30))
 
--- Info Panel
+-- Info Panel (taller, better padding, gradient bg)
 local infoPanel = Instance.new("Frame")
-infoPanel.Size = UDim2.new(1,-12,0,100); infoPanel.Position = UDim2.new(0,6,0,46)
-infoPanel.BackgroundColor3 = Color3.fromRGB(20,20,24)
+infoPanel.Size = UDim2.new(1,-24,0,112); infoPanel.Position = UDim2.new(0,12,0,56)
+infoPanel.BackgroundColor3 = C_PANEL
 infoPanel.BorderSizePixel = 0; infoPanel.Parent = mainFrame
-corner(infoPanel,10); stroke(infoPanel,Color3.fromRGB(55,55,65),1)
+corner(infoPanel,10); stroke(infoPanel,C_STROKE_DIM,1)
+gradient(infoPanel, C_PANEL_HI, C_PANEL, 90)
+padding(infoPanel, 4, 4, 6, 6)
 
 local function mkRow(y,icon,label)
     local r = Instance.new("Frame")
-    r.Size = UDim2.new(1,-8,0,22); r.Position = UDim2.new(0,4,0,y)
+    r.Size = UDim2.new(1,-12,0,24); r.Position = UDim2.new(0,6,0,y)
     r.BackgroundTransparency = 1; r.Parent = infoPanel
     local ib = Instance.new("Frame")
-    ib.Size = UDim2.new(0,22,0,22); ib.BackgroundColor3 = Color3.fromRGB(30,30,35)
-    ib.BorderSizePixel = 0; ib.Parent = r; corner(ib,5); stroke(ib,Color3.fromRGB(50,50,60),1)
+    ib.Size = UDim2.new(0,24,0,24); ib.BackgroundColor3 = Color3.fromRGB(36, 36, 44)
+    ib.BorderSizePixel = 0; ib.Parent = r; corner(ib,6); stroke(ib,Color3.fromRGB(60,60,72),1)
     local il = Instance.new("TextLabel")
     il.Size = UDim2.new(1,0,1,0); il.BackgroundTransparency = 1
-    il.Text = icon; il.TextColor3 = Color3.new(1,1,1)
-    il.Font = Enum.Font.GothamBold; il.TextSize = 11; il.Parent = ib
+    il.Text = icon; il.TextColor3 = C_TEXT
+    il.Font = Enum.Font.GothamBold; il.TextSize = 12; il.Parent = ib
     local lb = Instance.new("TextLabel")
-    lb.Size = UDim2.new(0,90,1,0); lb.Position = UDim2.new(0,28,0,0)
+    lb.Size = UDim2.new(0,120,1,0); lb.Position = UDim2.new(0,30,0,0)
     lb.BackgroundTransparency = 1; lb.Text = label
-    lb.TextColor3 = Color3.fromRGB(210,210,210); lb.Font = Enum.Font.Gotham
+    lb.TextColor3 = C_TEXT_DIM; lb.Font = Enum.Font.Gotham
     lb.TextSize = 11; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.Parent = r
     local cl = Instance.new("TextLabel")
-    cl.Size = UDim2.new(0,8,1,0); cl.Position = UDim2.new(0,118,0,0)
+    cl.Size = UDim2.new(0,8,1,0); cl.Position = UDim2.new(0,150,0,0)
     cl.BackgroundTransparency = 1; cl.Text = ":"
-    cl.TextColor3 = Color3.fromRGB(150,150,150); cl.Font = Enum.Font.Gotham
+    cl.TextColor3 = Color3.fromRGB(120,120,130); cl.Font = Enum.Font.Gotham
     cl.TextSize = 11; cl.Parent = r
     local vl = Instance.new("TextLabel")
-    vl.Size = UDim2.new(1,-135,1,0); vl.Position = UDim2.new(0,130,0,0)
+    vl.Size = UDim2.new(1,-165,1,0); vl.Position = UDim2.new(0,162,0,0)
     vl.BackgroundTransparency = 1; vl.Text = "--"
-    vl.TextColor3 = Color3.fromRGB(255,215,0); vl.Font = Enum.Font.GothamBold
+    vl.TextColor3 = C_GOLD; vl.Font = Enum.Font.GothamBold
     vl.TextSize = 11; vl.TextXAlignment = Enum.TextXAlignment.Left; vl.Parent = r
     return vl
 end
 
-local tuoiVal = mkRow(4,"📅","Tuoi")
-local gioiTinhVal = mkRow(28,"⚧","Gioi tinh")
-local phongYTVal = mkRow(52,"🏠","Phong yeu thich")
-local phongDOVal = mkRow(76,"📁","Phong dang o")
+local tuoiVal = mkRow(4,"📅","Tuổi")
+local gioiTinhVal = mkRow(30,"⚧","Giới tính")
+local phongYTVal = mkRow(56,"🏠","Phòng thích")
+local phongDOVal = mkRow(82,"📁","Phòng hiện tại")
 
--- Tab bar
+-- Tab bar (pill style with sliding indicator)
 local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1,-12,0,28); tabBar.Position = UDim2.new(0,6,0,152)
-tabBar.BackgroundColor3 = Color3.fromRGB(30,30,35)
+tabBar.Size = UDim2.new(1,-24,0,36); tabBar.Position = UDim2.new(0,12,0,176)
+tabBar.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
 tabBar.BorderSizePixel = 0; tabBar.Parent = mainFrame
-corner(tabBar,6); stroke(tabBar,Color3.fromRGB(60,60,70),1)
+corner(tabBar,10); stroke(tabBar,C_STROKE_DIM,1)
 
-local function mkTabBtn(text, x, w, active)
+-- Sliding indicator (animated pill behind active tab)
+local tabIndicator = Instance.new("Frame")
+tabIndicator.Size = UDim2.new(0.33,-6,0,28); tabIndicator.Position = UDim2.new(0,3,0,4)
+tabIndicator.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+tabIndicator.BorderSizePixel = 0; tabIndicator.Parent = tabBar
+corner(tabIndicator,8)
+gradient(tabIndicator, Color3.fromRGB(80, 80, 95), Color3.fromRGB(50, 50, 62), 90)
+
+local function mkTabBtn(text, x, w)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(w,-2,0,24); b.Position = UDim2.new(x,2,0,2)
-    b.BackgroundColor3 = active and Color3.fromRGB(50,50,60) or Color3.fromRGB(35,35,40)
-    b.Text = text; b.TextColor3 = active and Color3.new(1,1,1) or Color3.fromRGB(200,200,200)
-    b.Font = Enum.Font.GothamBold; b.TextSize = 10; b.BorderSizePixel = 0
-    b.Parent = tabBar; corner(b,5)
+    b.Size = UDim2.new(w,-2,0,28); b.Position = UDim2.new(x,2,0,4)
+    b.BackgroundTransparency = 1
+    b.Text = text; b.TextColor3 = C_TEXT
+    b.Font = Enum.Font.GothamBold; b.TextSize = 11; b.BorderSizePixel = 0
+    b.Parent = tabBar; corner(b,8)
+    b.AutoButtonColor = false
     return b
 end
 
-local tab1Btn = mkTabBtn("⚙️ FUNCTIONS", 0, 0.33, true)
-local tab2Btn = mkTabBtn("💾 SLOTS", 0.33, 0.33, false)
-local tab3Btn = mkTabBtn("🚪 ROOMS", 0.66, 0.34, false)
+local tab1Btn = mkTabBtn("⚙️ FUNCTIONS", 0, 0.33)
+local tab2Btn = mkTabBtn("💾 SLOTS", 0.33, 0.33)
+local tab3Btn = mkTabBtn("🚪 ROOMS", 0.66, 0.34)
 
--- ScrollingFrame
+-- ScrollingFrame (wider, taller for new layout)
 local function mkScrollParent()
     local sc = Instance.new("ScrollingFrame")
-    sc.Size = UDim2.new(1,-12,0,260); sc.Position = UDim2.new(0,6,0,186)
-    sc.BackgroundColor3 = Color3.fromRGB(20,20,24)
-    sc.BorderSizePixel = 0; sc.ScrollBarThickness = 8
-    sc.ScrollBarImageColor3 = Color3.fromRGB(255,60,60)
+    sc.Size = UDim2.new(1,-24,0,318); sc.Position = UDim2.new(0,12,0,220)
+    sc.BackgroundColor3 = C_PANEL
+    sc.BorderSizePixel = 0; sc.ScrollBarThickness = 6
+    sc.ScrollBarImageColor3 = C_STROKE
+    sc.ScrollBarImageTransparency = 0.3
     sc.ScrollingDirection = Enum.ScrollingDirection.Y
     sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
     sc.CanvasSize = UDim2.new(0,0,0,0)
     sc.Parent = mainFrame
-    corner(sc,10); stroke(sc,Color3.fromRGB(55,55,65),1)
+    corner(sc,10); stroke(sc,C_STROKE_DIM,1)
+    gradient(sc, C_PANEL_HI, C_PANEL, 90)
     local list = Instance.new("UIListLayout")
     list.Padding = UDim.new(0,6); list.SortOrder = Enum.SortOrder.LayoutOrder
     list.Parent = sc
+    padding(sc, 6, 6, 6, 6)
     return sc
 end
 
@@ -569,285 +693,332 @@ local tab1Content = mkScrollParent()
 local tab2Content = mkScrollParent(); tab2Content.Visible = false
 local tab3Content = mkScrollParent(); tab3Content.Visible = false
 
--- TAB 1: Functions
-local function mkToggle(parent, icon, title, desc, on, layoutOrder)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1,-10,0,50); row.BackgroundTransparency = 1
-    row.LayoutOrder = layoutOrder; row.Parent = parent
-    local ic = Instance.new("TextLabel")
-    ic.Size = UDim2.new(0,28,0,28); ic.Position = UDim2.new(0,4,0,4)
-    ic.BackgroundTransparency = 1; ic.Text = icon
-    ic.TextColor3 = Color3.new(1,1,1); ic.Font = Enum.Font.GothamBold
-    ic.TextSize = 20; ic.Parent = row
-    local tl = Instance.new("TextLabel")
-    tl.Size = UDim2.new(0,140,0,16); tl.Position = UDim2.new(0,38,0,4)
-    tl.BackgroundTransparency = 1; tl.Text = title
-    tl.TextColor3 = Color3.new(1,1,1); tl.Font = Enum.Font.GothamBold
-    tl.TextSize = 11; tl.TextXAlignment = Enum.TextXAlignment.Left; tl.Parent = row
-    local dl = Instance.new("TextLabel")
-    dl.Size = UDim2.new(0,160,0,12); dl.Position = UDim2.new(0,38,0,20)
-    dl.BackgroundTransparency = 1; dl.Text = desc
-    dl.TextColor3 = Color3.fromRGB(160,160,160); dl.Font = Enum.Font.Gotham
-    dl.TextSize = 9; dl.TextXAlignment = Enum.TextXAlignment.Left; dl.Parent = row
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0,64,0,28); btn.Position = UDim2.new(1,-72,0,10)
-    btn.BackgroundColor3 = on and Color3.fromRGB(0,140,60) or Color3.fromRGB(100,100,100)
-    btn.Text = on and "ON" or "OFF"; btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.GothamBold; btn.TextSize = 11; btn.BorderSizePixel = 0
-    btn.Parent = row; corner(btn,6)
-    local st = stroke(btn, on and Color3.fromRGB(0,200,100) or Color3.fromRGB(150,150,150),1)
-    return btn, st
+-- Section label helper for tab content
+local function mkSectionLabel(parent, text, order)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1,-8,0,18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = C_GOLD
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 10
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.LayoutOrder = order
+    lbl.Parent = parent
+    return lbl
 end
 
-local ghostToggleBtn, ghostStrokeObj = mkToggle(tab1Content, "👻", "Ghost ESP", "Highlight + Billboard", true, 1)
-local orbToggleBtn, orbStrokeObj = mkToggle(tab1Content, "🟠", "Orb ESP", "Orb marker", true, 2)
-local brightToggleBtn, brightStrokeObj = mkToggle(tab1Content, "☀️", "Full Bright", "Max visibility", false, 3)
-local favToggleBtn, favStrokeObj = mkToggle(tab1Content, "🏠", "FavRoom ESP", "Show favorite room", false, 4)
--- FIX: Đổi mặc định Always Show Mini thành true (ON)
-local miniToggleBtn, miniStrokeObj = mkToggle(tab1Content, "🎛️", "Always Show Mini", "Mini button always visible", true, 5)
-local aimbotToggleBtn, aimbotStrokeObj = mkToggle(tab1Content, "🎯", "Ghost Aimbot", "Auto-aim camera at ghost", false, 6)
+-- Toggle row builder (wider, with hover on toggle button)
+local function mkToggle(parent, icon, title, desc, on, layoutOrder)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,-8,0,56); row.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+    row.BackgroundTransparency = 0.4
+    row.LayoutOrder = layoutOrder; row.Parent = parent
+    corner(row,8); stroke(row, C_STROKE_DIM, 1)
+    local ic = Instance.new("TextLabel")
+    ic.Size = UDim2.new(0,32,0,32); ic.Position = UDim2.new(0,8,0,12)
+    ic.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+    ic.BorderSizePixel = 0; ic.Parent = row; corner(ic,7)
+    stroke(ic, Color3.fromRGB(60,60,72), 1)
+    ic.Text = icon; ic.TextColor3 = C_TEXT
+    ic.Font = Enum.Font.GothamBold; ic.TextSize = 18
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.new(0,200,0,18); tl.Position = UDim2.new(0,48,0,10)
+    tl.BackgroundTransparency = 1; tl.Text = title
+    tl.TextColor3 = C_TEXT; tl.Font = Enum.Font.GothamBold
+    tl.TextSize = 12; tl.TextXAlignment = Enum.TextXAlignment.Left; tl.Parent = row
+    local dl = Instance.new("TextLabel")
+    dl.Size = UDim2.new(0,220,0,14); dl.Position = UDim2.new(0,48,0,28)
+    dl.BackgroundTransparency = 1; dl.Text = desc
+    dl.TextColor3 = C_TEXT_DIM; dl.Font = Enum.Font.Gotham
+    dl.TextSize = 9; dl.TextXAlignment = Enum.TextXAlignment.Left; dl.Parent = row
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,72,0,32); btn.Position = UDim2.new(1,-82,0,12)
+    btn.BackgroundColor3 = on and C_ON_GREEN or C_OFF_RED
+    btn.Text = on and "ON" or "OFF"; btn.TextColor3 = C_TEXT
+    btn.Font = Enum.Font.GothamBold; btn.TextSize = 12; btn.BorderSizePixel = 0
+    btn.Parent = row; corner(btn,7)
+    local st = stroke(btn, on and Color3.fromRGB(0,230,120) or Color3.fromRGB(220,60,60),1)
+    btn.AutoButtonColor = false
+    return btn, st, row
+end
 
--- Auto Escape
+-- ============ TAB 1: Functions ============
+mkSectionLabel(tab1Content, "🔹 ESP & VISUAL", 0)
+local ghostToggleBtn, ghostStrokeObj = mkToggle(tab1Content, "👻", "Ghost ESP", "Highlight + Billboard cho ma", true, 1)
+local orbToggleBtn, orbStrokeObj = mkToggle(tab1Content, "🟠", "Orb ESP", "Đánh dấu orb trên map", true, 2)
+local brightToggleBtn, brightStrokeObj = mkToggle(tab1Content, "☀️", "Full Bright", "Tăng độ sáng tối đa", false, 3)
+local favToggleBtn, favStrokeObj = mkToggle(tab1Content, "🏠", "FavRoom ESP", "Hiển thị phòng yêu thích", false, 4)
+
+mkSectionLabel(tab1Content, "⚡ MOVEMENT & AIM", 10)
+-- SPEED HACK (toggle + textbox)
+local speedToggleBtn, speedStrokeObj, speedRow = mkToggle(tab1Content, "💨", "Speed Hack", "Tăng tốc độ di chuyển", false, 11)
+-- Replace the desc position to make room for input
+-- Speed textbox
+local speedInputLbl = Instance.new("TextLabel")
+speedInputLbl.Size = UDim2.new(0,40,0,16); speedInputLbl.Position = UDim2.new(1,-180,0,20)
+speedInputLbl.BackgroundTransparency = 1; speedInputLbl.Text = "Speed:"
+speedInputLbl.TextColor3 = C_TEXT_DIM; speedInputLbl.Font = Enum.Font.GothamBold
+speedInputLbl.TextSize = 10; speedInputLbl.TextXAlignment = Enum.TextXAlignment.Right
+speedInputLbl.Parent = speedRow
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(0,46,0,22); speedInput.Position = UDim2.new(1,-136,0,17)
+speedInput.BackgroundColor3 = Color3.fromRGB(36, 36, 44)
+speedInput.Text = "50"; speedInput.TextColor3 = C_TEXT
+speedInput.Font = Enum.Font.GothamBold; speedInput.TextSize = 12
+speedInput.BorderSizePixel = 0; speedInput.PlaceholderText = "16-500"
+speedInput.PlaceholderColor3 = Color3.fromRGB(120,120,130)
+speedInput.TextXAlignment = Enum.TextXAlignment.Center
+speedInput.Parent = speedRow; corner(speedInput,5)
+local speedInputStroke = stroke(speedInput, Color3.fromRGB(80,80,100), 1)
+
+-- Speed input focus/blur feedback
+speedInput.Focused:Connect(function()
+    TweenService:Create(speedInputStroke, TweenInfo.new(0.15), {
+        Color = C_STROKE, Thickness = 1.5
+    }):Play()
+end)
+speedInput.FocusLost:Connect(function(enterPressed)
+    TweenService:Create(speedInputStroke, TweenInfo.new(0.2), {
+        Color = Color3.fromRGB(80,80,100), Thickness = 1
+    }):Play()
+    local n = tonumber(speedInput.Text)
+    if n then
+        speedHackValue = math.clamp(math.floor(n), 1, 500)
+        speedInput.Text = tostring(speedHackValue)
+        if speedHackActive then applySpeedHack() end
+    else
+        speedInput.Text = tostring(speedHackValue)
+    end
+end)
+
+local aimbotToggleBtn, aimbotStrokeObj = mkToggle(tab1Content, "🎯", "Ghost Aimbot", "Camera tự ngắm ma gần nhất", false, 12)
+local miniToggleBtn, miniStrokeObj = mkToggle(tab1Content, "🎛️", "Always Show Mini", "Luôn hiện nút mini", true, 13)
+
+-- Auto Escape row
+mkSectionLabel(tab1Content, "🛡️ AUTO ESCAPE", 20)
 local aeRow = Instance.new("Frame")
-aeRow.Size = UDim2.new(1,-10,0,60); aeRow.BackgroundTransparency = 1
-aeRow.LayoutOrder = 5; aeRow.Parent = tab1Content
+aeRow.Size = UDim2.new(1,-8,0,72); aeRow.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+aeRow.BackgroundTransparency = 0.4
+aeRow.LayoutOrder = 21; aeRow.Parent = tab1Content
+corner(aeRow,8); stroke(aeRow, C_STROKE_DIM, 1)
 
 local aeIcon = Instance.new("TextLabel")
-aeIcon.Size = UDim2.new(0,28,0,28); aeIcon.Position = UDim2.new(0,4,0,4)
-aeIcon.BackgroundTransparency = 1; aeIcon.Text = "⚡"
-aeIcon.TextColor3 = Color3.new(1,1,1); aeIcon.Font = Enum.Font.GothamBold
-aeIcon.TextSize = 20; aeIcon.Parent = aeRow
+aeIcon.Size = UDim2.new(0,32,0,32); aeIcon.Position = UDim2.new(0,8,0,8)
+aeIcon.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+aeIcon.BorderSizePixel = 0; aeIcon.Parent = aeRow; corner(aeIcon,7)
+stroke(aeIcon, Color3.fromRGB(60,60,72), 1)
+aeIcon.Text = "⚡"; aeIcon.TextColor3 = C_TEXT
+aeIcon.Font = Enum.Font.GothamBold; aeIcon.TextSize = 18
 
 local aeTitle = Instance.new("TextLabel")
-aeTitle.Size = UDim2.new(0,140,0,16); aeTitle.Position = UDim2.new(0,38,0,4)
+aeTitle.Size = UDim2.new(0,180,0,18); aeTitle.Position = UDim2.new(0,48,0,8)
 aeTitle.BackgroundTransparency = 1; aeTitle.Text = "Auto Escape"
-aeTitle.TextColor3 = Color3.new(1,1,1); aeTitle.Font = Enum.Font.GothamBold
-aeTitle.TextSize = 11; aeTitle.TextXAlignment = Enum.TextXAlignment.Left; aeTitle.Parent = aeRow
+aeTitle.TextColor3 = C_TEXT; aeTitle.Font = Enum.Font.GothamBold
+aeTitle.TextSize = 12; aeTitle.TextXAlignment = Enum.TextXAlignment.Left; aeTitle.Parent = aeRow
 
 local aeDesc = Instance.new("TextLabel")
-aeDesc.Size = UDim2.new(0,160,0,12); aeDesc.Position = UDim2.new(0,38,0,20)
-aeDesc.BackgroundTransparency = 1; aeDesc.Text = "TP to slot if ghost > 2m/s"
-aeDesc.TextColor3 = Color3.fromRGB(160,160,160); aeDesc.Font = Enum.Font.Gotham
+aeDesc.Size = UDim2.new(0,220,0,14); aeDesc.Position = UDim2.new(0,48,0,28)
+aeDesc.BackgroundTransparency = 1; aeDesc.Text = "TP về slot khi ma > 2 m/s"
+aeDesc.TextColor3 = C_TEXT_DIM; aeDesc.Font = Enum.Font.Gotham
 aeDesc.TextSize = 9; aeDesc.TextXAlignment = Enum.TextXAlignment.Left; aeDesc.Parent = aeRow
 
 local escapeToggleBtn = Instance.new("TextButton")
-escapeToggleBtn.Size = UDim2.new(0,64,0,28); escapeToggleBtn.Position = UDim2.new(1,-72,0,4)
-escapeToggleBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
-escapeToggleBtn.Text = "OFF"; escapeToggleBtn.TextColor3 = Color3.new(1,1,1)
-escapeToggleBtn.Font = Enum.Font.GothamBold; escapeToggleBtn.TextSize = 11
+escapeToggleBtn.Size = UDim2.new(0,72,0,32); escapeToggleBtn.Position = UDim2.new(1,-82,0,8)
+escapeToggleBtn.BackgroundColor3 = C_OFF_RED
+escapeToggleBtn.Text = "OFF"; escapeToggleBtn.TextColor3 = C_TEXT
+escapeToggleBtn.Font = Enum.Font.GothamBold; escapeToggleBtn.TextSize = 12
 escapeToggleBtn.BorderSizePixel = 0; escapeToggleBtn.Parent = aeRow
-corner(escapeToggleBtn,6)
-local escapeToggleStroke = stroke(escapeToggleBtn, Color3.fromRGB(150,150,150),1)
+escapeToggleBtn.AutoButtonColor = false
+corner(escapeToggleBtn,7)
+local escapeToggleStroke = stroke(escapeToggleBtn, Color3.fromRGB(220,60,60),1)
 
 local slLabel = Instance.new("TextLabel")
-slLabel.Size = UDim2.new(0,30,0,12); slLabel.Position = UDim2.new(1,-204,0,28)
-slLabel.BackgroundTransparency = 1; slLabel.Text = "Slot:"
-slLabel.TextColor3 = Color3.fromRGB(180,180,180); slLabel.Font = Enum.Font.GothamBold
-slLabel.TextSize = 10; slLabel.Parent = aeRow
+slLabel.Size = UDim2.new(0,40,0,14); slLabel.Position = UDim2.new(0,48,0,46)
+slLabel.BackgroundTransparency = 1; slLabel.Text = "Escape Slot:"
+slLabel.TextColor3 = C_TEXT_DIM; slLabel.Font = Enum.Font.GothamBold
+slLabel.TextSize = 10; slLabel.TextXAlignment = Enum.TextXAlignment.Left; slLabel.Parent = aeRow
 
 local slot1Btn = Instance.new("TextButton")
-slot1Btn.Size = UDim2.new(0,30,0,24); slot1Btn.Position = UDim2.new(1,-168,0,28)
+slot1Btn.Size = UDim2.new(0,38,0,22); slot1Btn.Position = UDim2.new(0,128,0,42)
 slot1Btn.BackgroundColor3 = Color3.fromRGB(0,120,200); slot1Btn.Text = "1"
-slot1Btn.TextColor3 = Color3.new(1,1,1); slot1Btn.Font = Enum.Font.GothamBold
+slot1Btn.TextColor3 = C_TEXT; slot1Btn.Font = Enum.Font.GothamBold
 slot1Btn.TextSize = 12; slot1Btn.BorderSizePixel = 0; slot1Btn.Parent = aeRow
+slot1Btn.AutoButtonColor = false
 corner(slot1Btn,5)
 local slot1Stroke = stroke(slot1Btn,Color3.fromRGB(0,200,255),1)
 
 local slot2Btn = Instance.new("TextButton")
-slot2Btn.Size = UDim2.new(0,30,0,24); slot2Btn.Position = UDim2.new(1,-132,0,28)
-slot2Btn.BackgroundColor3 = Color3.fromRGB(60,60,70); slot2Btn.Text = "2"
-slot2Btn.TextColor3 = Color3.new(1,1,1); slot2Btn.Font = Enum.Font.GothamBold
+slot2Btn.Size = UDim2.new(0,38,0,22); slot2Btn.Position = UDim2.new(0,170,0,42)
+slot2Btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60); slot2Btn.Text = "2"
+slot2Btn.TextColor3 = C_TEXT; slot2Btn.Font = Enum.Font.GothamBold
 slot2Btn.TextSize = 12; slot2Btn.BorderSizePixel = 0; slot2Btn.Parent = aeRow
+slot2Btn.AutoButtonColor = false
 corner(slot2Btn,5)
 local slot2Stroke = stroke(slot2Btn,Color3.fromRGB(100,100,100),1)
 
 local slot3Btn = Instance.new("TextButton")
-slot3Btn.Size = UDim2.new(0,30,0,24); slot3Btn.Position = UDim2.new(1,-96,0,28)
-slot3Btn.BackgroundColor3 = Color3.fromRGB(60,60,70); slot3Btn.Text = "3"
-slot3Btn.TextColor3 = Color3.new(1,1,1); slot3Btn.Font = Enum.Font.GothamBold
+slot3Btn.Size = UDim2.new(0,38,0,22); slot3Btn.Position = UDim2.new(0,212,0,42)
+slot3Btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60); slot3Btn.Text = "3"
+slot3Btn.TextColor3 = C_TEXT; slot3Btn.Font = Enum.Font.GothamBold
 slot3Btn.TextSize = 12; slot3Btn.BorderSizePixel = 0; slot3Btn.Parent = aeRow
+slot3Btn.AutoButtonColor = false
 corner(slot3Btn,5)
 local slot3Stroke = stroke(slot3Btn,Color3.fromRGB(100,100,100),1)
 
--- TAB 2: Save Slots + Hotkey Settings
+-- ============ TAB 2: Save Slots + Hotkey Settings ============
+mkSectionLabel(tab2Content, "💾 SAVE SLOTS", 0)
 local function mkSlotRow(parent, slotNum)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1,-10,0,56); row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1,-8,0,64); row.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+    row.BackgroundTransparency = 0.4
     row.LayoutOrder = slotNum; row.Parent = parent
+    corner(row,8); stroke(row, C_STROKE_DIM, 1)
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(0,60,0,26); lbl.Position = UDim2.new(0,4,0,10)
+    lbl.Size = UDim2.new(0,80,0,32); lbl.Position = UDim2.new(0,10,0,16)
     lbl.BackgroundTransparency = 1; lbl.Text = "SLOT "..slotNum
-    lbl.TextColor3 = Color3.fromRGB(255,215,0); lbl.Font = Enum.Font.GothamBold
+    lbl.TextColor3 = C_GOLD; lbl.Font = Enum.Font.GothamBold
     lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Center; lbl.Parent = row
     local st = Instance.new("TextLabel")
-    st.Size = UDim2.new(0,120,0,18); st.Position = UDim2.new(0,70,0,14)
+    st.Size = UDim2.new(0,150,0,18); st.Position = UDim2.new(0,90,0,23)
     st.BackgroundTransparency = 1; st.Text = ""
     st.TextColor3 = Color3.fromRGB(100,255,100); st.Font = Enum.Font.Gotham
     st.TextSize = 10; st.TextXAlignment = Enum.TextXAlignment.Left; st.Parent = row
     local sv = Instance.new("TextButton")
-    sv.Size = UDim2.new(0,80,0,32); sv.Position = UDim2.new(1,-180,0,10)
+    sv.Size = UDim2.new(0,100,0,38); sv.Position = UDim2.new(1,-208,0,13)
     sv.BackgroundColor3 = Color3.fromRGB(0,120,200); sv.Text = "💾 Save"
-    sv.TextColor3 = Color3.new(1,1,1); sv.Font = Enum.Font.GothamBold
-    sv.TextSize = 12; sv.BorderSizePixel = 0; sv.Parent = row
-    corner(sv,6)
+    sv.TextColor3 = C_TEXT; sv.Font = Enum.Font.GothamBold
+    sv.TextSize = 13; sv.BorderSizePixel = 0; sv.Parent = row
+    sv.AutoButtonColor = false
+    corner(sv,7); stroke(sv, Color3.fromRGB(0,200,255), 1)
+    addHover(sv, Color3.fromRGB(0,120,200), Color3.fromRGB(0,150,240))
     local tp = Instance.new("TextButton")
-    tp.Size = UDim2.new(0,80,0,32); tp.Position = UDim2.new(1,-90,0,10)
+    tp.Size = UDim2.new(0,100,0,38); tp.Position = UDim2.new(1,-104,0,13)
     tp.BackgroundColor3 = Color3.fromRGB(200,100,0); tp.Text = "📍 Tele"
-    tp.TextColor3 = Color3.new(1,1,1); tp.Font = Enum.Font.GothamBold
-    tp.TextSize = 12; tp.BorderSizePixel = 0; tp.Parent = row
-    corner(tp,6)
+    tp.TextColor3 = C_TEXT; tp.Font = Enum.Font.GothamBold
+    tp.TextSize = 13; tp.BorderSizePixel = 0; tp.Parent = row
+    tp.AutoButtonColor = false
+    corner(tp,7); stroke(tp, Color3.fromRGB(255,150,50), 1)
+    addHover(tp, Color3.fromRGB(200,100,0), Color3.fromRGB(240,140,30))
     return {save=sv, tele=tp, status=st}
 end
 
 local slotRows = {}
 for i=1,3 do slotRows[i] = mkSlotRow(tab2Content, i) end
 
--- Hotkey Settings trong Tab 2
+-- Hotkey Settings
+mkSectionLabel(tab2Content, "⚡ HOTKEY SETTINGS", 10)
 local hkSettingsFrame = Instance.new("Frame")
-hkSettingsFrame.Size = UDim2.new(1,-10,0,130)
-hkSettingsFrame.BackgroundTransparency = 1
-hkSettingsFrame.LayoutOrder = 4; hkSettingsFrame.Parent = tab2Content
+hkSettingsFrame.Size = UDim2.new(1,-8,0,140)
+hkSettingsFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+hkSettingsFrame.BackgroundTransparency = 0.4
+hkSettingsFrame.LayoutOrder = 11; hkSettingsFrame.Parent = tab2Content
+corner(hkSettingsFrame,8); stroke(hkSettingsFrame, C_STROKE_DIM, 1)
+padding(hkSettingsFrame, 8, 8, 8, 8)
 
-local hkSettingsTitle = Instance.new("TextLabel")
-hkSettingsTitle.Size = UDim2.new(1,0,0,18)
-hkSettingsTitle.Position = UDim2.new(0,0,0,4)
-hkSettingsTitle.BackgroundTransparency = 1
-hkSettingsTitle.Text = "⚡ HOTKEY SETTINGS"
-hkSettingsTitle.TextColor3 = Color3.fromRGB(255,215,0)
-hkSettingsTitle.Font = Enum.Font.GothamBold
-hkSettingsTitle.TextSize = 12
-hkSettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
-hkSettingsTitle.Parent = hkSettingsFrame
+local function mkHkToggle(parent, y, icon, label, on, onclickRef)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,-16,0,32); row.Position = UDim2.new(0,8,0,y)
+    row.BackgroundTransparency = 1; row.Parent = parent
+    local ic = Instance.new("TextLabel")
+    ic.Size = UDim2.new(0,28,0,28); ic.Position = UDim2.new(0,0,0,2)
+    ic.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+    ic.BorderSizePixel = 0; ic.Parent = row; corner(ic,6)
+    stroke(ic, Color3.fromRGB(60,60,72), 1)
+    ic.Text = icon; ic.TextColor3 = C_TEXT
+    ic.Font = Enum.Font.GothamBold; ic.TextSize = 16
+    local lb = Instance.new("TextLabel")
+    lb.Size = UDim2.new(0,160,0,28); lb.Position = UDim2.new(0,34,0,2)
+    lb.BackgroundTransparency = 1; lb.Text = label
+    lb.TextColor3 = C_TEXT; lb.Font = Enum.Font.GothamBold
+    lb.TextSize = 11; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.Parent = row
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,68,0,28); btn.Position = UDim2.new(1,-76,0,2)
+    btn.BackgroundColor3 = on and C_ON_GREEN or C_OFF_RED
+    btn.Text = on and "ON" or "OFF"; btn.TextColor3 = C_TEXT
+    btn.Font = Enum.Font.GothamBold; btn.TextSize = 11
+    btn.BorderSizePixel = 0; btn.Parent = row
+    btn.AutoButtonColor = false
+    corner(btn,6)
+    local st = stroke(btn, on and Color3.fromRGB(0,230,120) or Color3.fromRGB(220,60,60),1)
+    return btn, st, row
+end
 
--- Show Hotkey Toggle
-local showHkRow = Instance.new("Frame")
-showHkRow.Size = UDim2.new(1,0,0,40)
-showHkRow.Position = UDim2.new(0,0,0,24)
-showHkRow.BackgroundTransparency = 1
-showHkRow.Parent = hkSettingsFrame
+local showHkBtn, showHkStroke = mkHkToggle(hkSettingsFrame, 8, "👁️", "Show Hotkey", true)
+local lockHkBtn, lockHkStroke = mkHkToggle(hkSettingsFrame, 44, "🔒", "Lock Position", false)
 
-local showHkIcon = Instance.new("TextLabel")
-showHkIcon.Size = UDim2.new(0,28,0,28); showHkIcon.Position = UDim2.new(0,4,0,4)
-showHkIcon.BackgroundTransparency = 1; showHkIcon.Text = "👁️"
-showHkIcon.TextColor3 = Color3.new(1,1,1); showHkIcon.Font = Enum.Font.GothamBold
-showHkIcon.TextSize = 18; showHkIcon.Parent = showHkRow
-
-local showHkLbl = Instance.new("TextLabel")
-showHkLbl.Size = UDim2.new(0,140,0,20); showHkLbl.Position = UDim2.new(0,36,0,8)
-showHkLbl.BackgroundTransparency = 1; showHkLbl.Text = "Show Hotkey"
-showHkLbl.TextColor3 = Color3.new(1,1,1); showHkLbl.Font = Enum.Font.GothamBold
-showHkLbl.TextSize = 11; showHkLbl.TextXAlignment = Enum.TextXAlignment.Left
-showHkLbl.Parent = showHkRow
-
-local showHkBtn = Instance.new("TextButton")
-showHkBtn.Size = UDim2.new(0,64,0,28); showHkBtn.Position = UDim2.new(1,-72,0,4)
-showHkBtn.BackgroundColor3 = Color3.fromRGB(0,140,60)
-showHkBtn.Text = "ON"; showHkBtn.TextColor3 = Color3.new(1,1,1)
-showHkBtn.Font = Enum.Font.GothamBold; showHkBtn.TextSize = 11
-showHkBtn.BorderSizePixel = 0; showHkBtn.Parent = showHkRow
-corner(showHkBtn,6)
-local showHkStroke = stroke(showHkBtn, Color3.fromRGB(0,200,100),1)
-
--- Lock Hotkey Position Toggle
-local lockHkRow = Instance.new("Frame")
-lockHkRow.Size = UDim2.new(1,0,0,40)
-lockHkRow.Position = UDim2.new(0,0,0,66)
-lockHkRow.BackgroundTransparency = 1
-lockHkRow.Parent = hkSettingsFrame
-
-local lockHkIcon = Instance.new("TextLabel")
-lockHkIcon.Size = UDim2.new(0,28,0,28); lockHkIcon.Position = UDim2.new(0,4,0,4)
-lockHkIcon.BackgroundTransparency = 1; lockHkIcon.Text = "🔒"
-lockHkIcon.TextColor3 = Color3.new(1,1,1); lockHkIcon.Font = Enum.Font.GothamBold
-lockHkIcon.TextSize = 18; lockHkIcon.Parent = lockHkRow
-
-local lockHkLbl = Instance.new("TextLabel")
-lockHkLbl.Size = UDim2.new(0,140,0,20); lockHkLbl.Position = UDim2.new(0,36,0,8)
-lockHkLbl.BackgroundTransparency = 1; lockHkLbl.Text = "Lock Position"
-lockHkLbl.TextColor3 = Color3.new(1,1,1); lockHkLbl.Font = Enum.Font.GothamBold
-lockHkLbl.TextSize = 11; lockHkLbl.TextXAlignment = Enum.TextXAlignment.Left
-lockHkLbl.Parent = lockHkRow
-
-local lockHkBtn = Instance.new("TextButton")
-lockHkBtn.Size = UDim2.new(0,64,0,28); lockHkBtn.Position = UDim2.new(1,-72,0,4)
-lockHkBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
-lockHkBtn.Text = "OFF"; lockHkBtn.TextColor3 = Color3.new(1,1,1)
-lockHkBtn.Font = Enum.Font.GothamBold; lockHkBtn.TextSize = 11
-lockHkBtn.BorderSizePixel = 0; lockHkBtn.Parent = lockHkRow
-corner(lockHkBtn,6)
-local lockHkStroke = stroke(lockHkBtn, Color3.fromRGB(150,150,150),1)
-
--- Hotkey Slot Selector
+-- Hotkey Slot Selector row
 local hkSlotRow = Instance.new("Frame")
-hkSlotRow.Size = UDim2.new(1,0,0,40)
-hkSlotRow.Position = UDim2.new(0,0,0,108)
-hkSlotRow.BackgroundTransparency = 1
-hkSlotRow.Parent = hkSettingsFrame
+hkSlotRow.Size = UDim2.new(1,-16,0,32); hkSlotRow.Position = UDim2.new(0,8,0,84)
+hkSlotRow.BackgroundTransparency = 1; hkSlotRow.Parent = hkSettingsFrame
 
 local hkSlotIcon = Instance.new("TextLabel")
-hkSlotIcon.Size = UDim2.new(0,28,0,28); hkSlotIcon.Position = UDim2.new(0,4,0,4)
-hkSlotIcon.BackgroundTransparency = 1; hkSlotIcon.Text = "🎯"
-hkSlotIcon.TextColor3 = Color3.new(1,1,1); hkSlotIcon.Font = Enum.Font.GothamBold
-hkSlotIcon.TextSize = 18; hkSlotIcon.Parent = hkSlotRow
+hkSlotIcon.Size = UDim2.new(0,28,0,28); hkSlotIcon.Position = UDim2.new(0,0,0,2)
+hkSlotIcon.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+hkSlotIcon.BorderSizePixel = 0; hkSlotIcon.Parent = hkSlotRow; corner(hkSlotIcon,6)
+stroke(hkSlotIcon, Color3.fromRGB(60,60,72), 1)
+hkSlotIcon.Text = "🎯"; hkSlotIcon.TextColor3 = C_TEXT
+hkSlotIcon.Font = Enum.Font.GothamBold; hkSlotIcon.TextSize = 16
 
 local hkSlotLbl = Instance.new("TextLabel")
-hkSlotLbl.Size = UDim2.new(0,100,0,20); hkSlotLbl.Position = UDim2.new(0,36,0,8)
+hkSlotLbl.Size = UDim2.new(0,120,0,28); hkSlotLbl.Position = UDim2.new(0,34,0,2)
 hkSlotLbl.BackgroundTransparency = 1; hkSlotLbl.Text = "Hotkey Slot:"
-hkSlotLbl.TextColor3 = Color3.new(1,1,1); hkSlotLbl.Font = Enum.Font.GothamBold
+hkSlotLbl.TextColor3 = C_TEXT; hkSlotLbl.Font = Enum.Font.GothamBold
 hkSlotLbl.TextSize = 11; hkSlotLbl.TextXAlignment = Enum.TextXAlignment.Left
 hkSlotLbl.Parent = hkSlotRow
 
-local hkSlot1 = Instance.new("TextButton")
-hkSlot1.Size = UDim2.new(0,34,0,28); hkSlot1.Position = UDim2.new(1,-118,0,4)
-hkSlot1.BackgroundColor3 = Color3.fromRGB(0,120,200); hkSlot1.Text = "1"
-hkSlot1.TextColor3 = Color3.new(1,1,1); hkSlot1.Font = Enum.Font.GothamBold
-hkSlot1.TextSize = 12; hkSlot1.BorderSizePixel = 0; hkSlot1.Parent = hkSlotRow
-corner(hkSlot1,5)
-local hkSlot1Stroke = stroke(hkSlot1,Color3.fromRGB(0,200,255),1)
+local function mkSlotBtn(x, num, active)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0,38,0,28); b.Position = UDim2.new(1,-128 + (x-1)*40,0,2)
+    b.BackgroundColor3 = active and Color3.fromRGB(0,120,200) or Color3.fromRGB(50, 50, 60)
+    b.Text = num; b.TextColor3 = C_TEXT
+    b.Font = Enum.Font.GothamBold; b.TextSize = 12; b.BorderSizePixel = 0
+    b.Parent = hkSlotRow; corner(b,5); b.AutoButtonColor = false
+    local s = stroke(b, active and Color3.fromRGB(0,200,255) or Color3.fromRGB(100,100,100), 1)
+    return b, s
+end
 
-local hkSlot2 = Instance.new("TextButton")
-hkSlot2.Size = UDim2.new(0,34,0,28); hkSlot2.Position = UDim2.new(1,-78,0,4)
-hkSlot2.BackgroundColor3 = Color3.fromRGB(60,60,70); hkSlot2.Text = "2"
-hkSlot2.TextColor3 = Color3.new(1,1,1); hkSlot2.Font = Enum.Font.GothamBold
-hkSlot2.TextSize = 12; hkSlot2.BorderSizePixel = 0; hkSlot2.Parent = hkSlotRow
-corner(hkSlot2,5)
-local hkSlot2Stroke = stroke(hkSlot2,Color3.fromRGB(100,100,100),1)
+local hkSlot1, hkSlot1Stroke = mkSlotBtn(1, "1", true)
+local hkSlot2, hkSlot2Stroke = mkSlotBtn(2, "2", false)
+local hkSlot3, hkSlot3Stroke = mkSlotBtn(3, "3", false)
 
-local hkSlot3 = Instance.new("TextButton")
-hkSlot3.Size = UDim2.new(0,34,0,28); hkSlot3.Position = UDim2.new(1,-38,0,4)
-hkSlot3.BackgroundColor3 = Color3.fromRGB(60,60,70); hkSlot3.Text = "3"
-hkSlot3.TextColor3 = Color3.new(1,1,1); hkSlot3.Font = Enum.Font.GothamBold
-hkSlot3.TextSize = 12; hkSlot3.BorderSizePixel = 0; hkSlot3.Parent = hkSlotRow
-corner(hkSlot3,5)
-local hkSlot3Stroke = stroke(hkSlot3,Color3.fromRGB(100,100,100),1)
-
--- TAB 3: Teleport Rooms
+-- ============ TAB 3: Teleport Rooms ============
+mkSectionLabel(tab3Content, "🚪 TELEPORT TO ROOM", 0)
 local tpFrame = Instance.new("Frame")
-tpFrame.Size = UDim2.new(1,-10,0,110); tpFrame.BackgroundTransparency = 1
+tpFrame.Size = UDim2.new(1,-8,0,120); tpFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+tpFrame.BackgroundTransparency = 0.4
 tpFrame.LayoutOrder = 1; tpFrame.Parent = tab3Content
+corner(tpFrame,8); stroke(tpFrame, C_STROKE_DIM, 1)
+padding(tpFrame, 10, 10, 10, 10)
 
 local curRoomBtn = Instance.new("TextButton")
-curRoomBtn.Size = UDim2.new(0,240,0,38); curRoomBtn.Position = UDim2.new(0.5,-120,0,8)
+curRoomBtn.Size = UDim2.new(1,0,0,42); curRoomBtn.Position = UDim2.new(0,0,0,8)
 curRoomBtn.BackgroundColor3 = Color3.fromRGB(0,150,150)
-curRoomBtn.Text = "🏠 Teleport to Current Room"
-curRoomBtn.TextColor3 = Color3.new(1,1,1); curRoomBtn.Font = Enum.Font.GothamBold
-curRoomBtn.TextSize = 12; curRoomBtn.BorderSizePixel = 0; curRoomBtn.Parent = tpFrame
-corner(curRoomBtn,6); stroke(curRoomBtn,Color3.fromRGB(0,200,200),1)
+curRoomBtn.Text = "🏠  Teleport to Current Room"
+curRoomBtn.TextColor3 = C_TEXT; curRoomBtn.Font = Enum.Font.GothamBold
+curRoomBtn.TextSize = 13; curRoomBtn.BorderSizePixel = 0; curRoomBtn.Parent = tpFrame
+curRoomBtn.AutoButtonColor = false
+corner(curRoomBtn,8); stroke(curRoomBtn,Color3.fromRGB(0,220,220),1)
+addHover(curRoomBtn, Color3.fromRGB(0,150,150), Color3.fromRGB(0,190,190))
 
 local favRoomBtn = Instance.new("TextButton")
-favRoomBtn.Size = UDim2.new(0,240,0,38); favRoomBtn.Position = UDim2.new(0.5,-120,0,56)
+favRoomBtn.Size = UDim2.new(1,0,0,42); favRoomBtn.Position = UDim2.new(0,0,0,58)
 favRoomBtn.BackgroundColor3 = Color3.fromRGB(200,80,120)
-favRoomBtn.Text = "❤️ Teleport to Favorite Room"
-favRoomBtn.TextColor3 = Color3.new(1,1,1); favRoomBtn.Font = Enum.Font.GothamBold
-favRoomBtn.TextSize = 12; favRoomBtn.BorderSizePixel = 0; favRoomBtn.Parent = tpFrame
-corner(favRoomBtn,6); stroke(favRoomBtn,Color3.fromRGB(255,100,150),1)
+favRoomBtn.Text = "❤️  Teleport to Favorite Room"
+favRoomBtn.TextColor3 = C_TEXT; favRoomBtn.Font = Enum.Font.GothamBold
+favRoomBtn.TextSize = 13; favRoomBtn.BorderSizePixel = 0; favRoomBtn.Parent = tpFrame
+favRoomBtn.AutoButtonColor = false
+corner(favRoomBtn,8); stroke(favRoomBtn,Color3.fromRGB(255,130,170),1)
+addHover(favRoomBtn, Color3.fromRGB(200,80,120), Color3.fromRGB(230,110,150))
 
--- Drag text
+-- Drag hint (bottom of main frame)
 local dragText = Instance.new("TextLabel")
-dragText.Size = UDim2.new(1,0,0,16); dragText.Position = UDim2.new(0,0,0,470)
-dragText.BackgroundTransparency = 1; dragText.Text = "⬌ DRAG TO MOVE ⬌"
-dragText.TextColor3 = Color3.fromRGB(100,100,100); dragText.Font = Enum.Font.Gotham
-dragText.TextSize = 9; dragText.Parent = mainFrame
+dragText.Size = UDim2.new(1,0,0,18); dragText.Position = UDim2.new(0,0,1,-22)
+dragText.BackgroundTransparency = 1; dragText.Text = "⬌  Kéo thả để di chuyển GUI  ⬌"
+dragText.TextColor3 = Color3.fromRGB(110,110,120); dragText.Font = Enum.Font.Gotham
+dragText.TextSize = 10; dragText.Parent = mainFrame
+
 
 -- ===================== MOBILE HOTKEY FRAME =====================
 local hotkeyFrame = Instance.new("Frame")
@@ -1024,6 +1195,19 @@ local function setAimbot(active)
     end
 end
 
+local function setSpeedHack(active)
+    speedHackActive = active
+    speedToggleBtn.Text = active and "ON" or "OFF"
+    speedToggleBtn.BackgroundColor3 = active and Color3.fromRGB(0,140,60) or Color3.fromRGB(160,30,30)
+    speedStrokeObj.Color = active and Color3.fromRGB(0,200,100) or Color3.fromRGB(220,60,60)
+    applySpeedHack()
+    if active then
+        print("[GhostESP] 💨 Speed Hack ON - WalkSpeed = "..tostring(speedHackValue))
+    else
+        print("[GhostESP] 💨 Speed Hack OFF - WalkSpeed = "..tostring(defaultWalkSpeed))
+    end
+end
+
 -- Khởi tạo trạng thái UI mặc định
 setAlwaysShowMini(alwaysShowMini)
 
@@ -1035,6 +1219,7 @@ table.insert(connections, favToggleBtn.MouseButton1Click:Connect(function() setF
 table.insert(connections, escapeToggleBtn.MouseButton1Click:Connect(function() setAutoEscape(not autoEscapeActive) end))
 table.insert(connections, miniToggleBtn.MouseButton1Click:Connect(function() setAlwaysShowMini(not alwaysShowMini) end))
 table.insert(connections, aimbotToggleBtn.MouseButton1Click:Connect(function() setAimbot(not aimbotActive) end))
+table.insert(connections, speedToggleBtn.MouseButton1Click:Connect(function() setSpeedHack(not speedHackActive) end))
 table.insert(connections, slot1Btn.MouseButton1Click:Connect(function() autoEscapeSlot=1; updateEscapeSlot() end))
 table.insert(connections, slot2Btn.MouseButton1Click:Connect(function() autoEscapeSlot=2; updateEscapeSlot() end))
 table.insert(connections, slot3Btn.MouseButton1Click:Connect(function() autoEscapeSlot=3; updateEscapeSlot() end))
@@ -1078,25 +1263,35 @@ table.insert(connections, hotkeyTeleBtn.MouseButton1Click:Connect(function()
     end
 end))
 
--- Tab switch
+-- Tab switch (with sliding indicator tween for smoothness)
 local function switchTab(n)
     tab1Content.Visible = n==1; tab2Content.Visible = n==2; tab3Content.Visible = n==3
     local btns = {tab1Btn, tab2Btn, tab3Btn}
     for i,b in ipairs(btns) do
-        b.BackgroundColor3 = (i==n) and Color3.fromRGB(50,50,60) or Color3.fromRGB(35,35,40)
-        b.TextColor3 = (i==n) and Color3.new(1,1,1) or Color3.fromRGB(200,200,200)
+        b.TextColor3 = (i==n) and Color3.fromRGB(255,255,255) or Color3.fromRGB(180,180,190)
     end
+    -- Slide the indicator pill
+    local targetX = (n==1) and 0 or (n==2) and 0.33 or 0.66
+    TweenService:Create(tabIndicator, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(targetX, 3, 0, 4)
+    }):Play()
     if n==2 then updateSlotStatus() end
 end
 table.insert(connections, tab1Btn.MouseButton1Click:Connect(function() switchTab(1) end))
 table.insert(connections, tab2Btn.MouseButton1Click:Connect(function() switchTab(2) end))
 table.insert(connections, tab3Btn.MouseButton1Click:Connect(function() switchTab(3) end))
 
--- Minimize / Expand
+-- Minimize / Expand (with smooth pop-in tweens)
 local function minimize()
     isExpanded = false
     miniFrame.Position = mainFrame.Position
-    miniFrame.Visible = true; mainFrame.Visible = false
+    mainFrame.Visible = false
+    miniFrame.Visible = true
+    -- Smooth pop-in for mini (start small, bounce to full size)
+    miniFrame.Size = UDim2.new(0, 40, 0, 40)
+    TweenService:Create(miniFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 62, 0, 62)
+    }):Play()
 end
 local function expand()
     isExpanded = true
@@ -1105,6 +1300,11 @@ local function expand()
     if not alwaysShowMini then
         miniFrame.Visible = false
     end
+    -- Smooth pop-in for main (start slightly smaller, grow to full size)
+    mainFrame.Size = UDim2.new(0, 440, 0, 540)
+    TweenService:Create(mainFrame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 460, 0, 560)
+    }):Play()
 end
 local function toggleFromMini()
     if alwaysShowMini then
@@ -1329,6 +1529,14 @@ local function update()
             favRoomESP = nil
         end
     end
+
+    -- Speed Hack persistence: re-apply if game reset WalkSpeed
+    if speedHackActive then
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.WalkSpeed ~= speedHackValue then
+            hum.WalkSpeed = speedHackValue
+        end
+    end
 end
 
 task.spawn(function()
@@ -1381,6 +1589,11 @@ RunService:BindToRenderStep("GhostAimbot", Enum.RenderPriority.Camera.Value + 1,
 -- ===================== CLEANUP =====================
 closeBtn.MouseButton1Click:Connect(function()
     pcall(function() RunService:UnbindFromRenderStep("GhostAimbot") end)
+    -- Reset speed hack before tearing down
+    pcall(function()
+        speedHackActive = false
+        applySpeedHack()
+    end)
     for _,c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     for _,c in pairs(attributeConnections) do pcall(function() c:Disconnect() end) end
     for _,d in pairs(espCache) do
@@ -1397,4 +1610,4 @@ closeBtn.MouseButton1Click:Connect(function()
     pcall(function() espFolder:Destroy() end)
 end)
 
-print("[GhostESP] v3.32 Fixed + Aimbot - GUI loaded OK!")
+print("[GhostESP] v4.00 Fixed + Aimbot + SpeedHack - GUI loaded OK!")
